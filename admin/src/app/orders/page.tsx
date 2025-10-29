@@ -1,27 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import Link from 'next/link';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { fetchAllOrders } from '@/store/slices/ordersSlice';
+import { useGetAllOrdersQuery } from '@/store/api/ordersApi';
+import ProtectedRoute from '@/middleware/ProtectedRoute';
 
-export default function OrdersPage() {
-  const router = useRouter();
-  const dispatch = useAppDispatch();
-  const { orders, loading } = useAppSelector((state) => state.orders);
-  const { user } = useAppSelector((state) => state.auth);
+function OrdersPageContent() {
+  const { data, isLoading } = useGetAllOrdersQuery();
+  const orders = data?.data.orders || [];
   
   const [filterStatus, setFilterStatus] = useState('all');
-
-  useEffect(() => {
-    if (user?.role !== 'admin') {
-      router.push('/login');
-      return;
-    }
-    
-    dispatch(fetchAllOrders());
-  }, [dispatch, user, router]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -54,10 +42,10 @@ export default function OrdersPage() {
     ? orders 
     : orders.filter((order) => order.orderStatus === filterStatus);
 
-  if (loading && orders.length === 0) {
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <div className="text-xl">Loading...</div>
+        <div className="text-xl">Loading orders...</div>
       </div>
     );
   }
@@ -224,5 +212,13 @@ export default function OrdersPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <ProtectedRoute requireAdmin={true}>
+      <OrdersPageContent />
+    </ProtectedRoute>
   );
 }

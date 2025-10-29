@@ -2,9 +2,12 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import { Product } from '@/types';
-import { useCart } from '@/contexts/CartContext';
-import { useWishlist } from '@/contexts/WishlistContext';
+import { useAuthContext } from '@/contexts/AuthContext';
+import { useAddToCartMutation } from '@/store/api/cartApi';
+import { useAddToWishlistMutation, useRemoveFromWishlistMutation, useGetWishlistQuery } from '@/store/api/wishlistApi';
+import { useState } from 'react';
 
 interface ProductCardProps {
   product: Product;
@@ -12,20 +15,61 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
-  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
-  const { addToCart } = useCart();
-  const inWishlist = isInWishlist(product.id);
+  const router = useRouter();
+  const pathname = usePathname();
+  const { isAuthenticated } = useAuthContext();
+  const [addToCart, { isLoading: isAddingToCart }] = useAddToCartMutation();
+  const [addToWishlist, { isLoading: isAddingToWishlist }] = useAddToWishlistMutation();
+  const [removeFromWishlist, { isLoading: isRemovingFromWishlist }] = useRemoveFromWishlistMutation();
+  const { data: wishlist } = useGetWishlistQuery(undefined, {
+    skip: !isAuthenticated, // Only fetch if authenticated
+  });
+  console.log(wishlist);
+  
 
-  const handleWishlistToggle = () => {
-    if (inWishlist) {
-      removeFromWishlist(product.id);
-    } else {
-      addToWishlist(product);
+  // Check if product is in wishlist
+  const inWishlist = wishlist?.products?.some((item: any) => item.product._id === product._id) || false;
+
+  const handleWishlistToggle = async () => {
+    // Check if user is authenticated
+    if (!isAuthenticated) {
+      // Redirect to login with return URL
+      const returnUrl = encodeURIComponent(pathname);
+      router.push(`/auth/login?returnUrl=${returnUrl}`);
+      return;
+    }
+
+    try {
+      if (inWishlist) {
+        await removeFromWishlist(product.id).unwrap();
+      } else {
+        await addToWishlist({ productId: product.id }).unwrap();
+      }
+    } catch (err) {
+      console.error('Failed to update wishlist:', err);
     }
   };
 
-  const handleAddToCart = () => {
-    addToCart(product, 1, product.sizes[0], product.colors[0]);
+  const handleAddToCart = async () => {
+    // Check if user is authenticated
+    if (!isAuthenticated) {
+      // Redirect to login with return URL
+      const returnUrl = encodeURIComponent(pathname);
+      router.push(`/auth/login?returnUrl=${returnUrl}`);
+      return;
+    }
+
+    try {
+      await addToCart({
+        productId: product.id,
+        quantity: 1,
+        size: product.sizes?.[0],
+        color: product.colors?.[0],
+      }).unwrap();
+      // Optional: Show success message
+    } catch (err) {
+      console.error('Failed to add to cart:', err);
+    }
   };
 
   // List View Layout
@@ -104,32 +148,47 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
               <div className="flex gap-3">
                 <button
                   onClick={handleWishlistToggle}
-                  className="p-3 border-2 border-gray-300 rounded-md hover:border-[#D32F2F] transition group/btn"
+                  disabled={isAddingToWishlist || isRemovingFromWishlist}
+                  className="p-3 border-2 border-gray-300 rounded-md hover:border-[#D32F2F] transition group/btn disabled:opacity-50 disabled:cursor-not-allowed"
                   title={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-6 w-6"
-                    fill={inWishlist ? '#D32F2F' : 'none'}
-                    viewBox="0 0 24 24"
-                    stroke={inWishlist ? '#D32F2F' : 'currentColor'}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                    />
-                  </svg>
+                  {isAddingToWishlist || isRemovingFromWishlist ? (
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#D32F2F] border-t-transparent"></div>
+                  ) : (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-6 w-6"
+                      fill={inWishlist ? '#D32F2F' : 'none'}
+                      viewBox="0 0 24 24"
+                      stroke={inWishlist ? '#D32F2F' : 'currentColor'}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                      />
+                    </svg>
+                  )}
                 </button>
                 <button
                   onClick={handleAddToCart}
-                  className="px-8 py-3 bg-[#D32F2F] text-white rounded-md hover:bg-[#B71C1C] transition font-semibold flex items-center gap-2"
+                  disabled={isAddingToCart || !product.inStock}
+                  className="px-8 py-3 bg-[#D32F2F] text-white rounded-md hover:bg-[#B71C1C] transition font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  Add to Cart
+                  {isAddingToCart ? (
+                    <>
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      Add to Cart
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -160,22 +219,27 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
       {/* Wishlist Button */}
       <button
         onClick={handleWishlistToggle}
-        className="absolute top-3 right-3 bg-white p-1.5 rounded-full shadow-md hover:bg-gray-100 transition"
+        disabled={isAddingToWishlist || isRemovingFromWishlist}
+        className="absolute top-3 right-3 bg-white p-1.5 rounded-full shadow-md hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="h-4 w-4"
-          fill={inWishlist ? '#D32F2F' : 'none'}
-          viewBox="0 0 24 24"
-          stroke={inWishlist ? '#D32F2F' : 'currentColor'}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-          />
-        </svg>
+        {isAddingToWishlist || isRemovingFromWishlist ? (
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#D32F2F] border-t-transparent"></div>
+        ) : (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-4 w-4"
+            fill={inWishlist ? '#D32F2F' : 'none'}
+            viewBox="0 0 24 24"
+            stroke={inWishlist ? '#D32F2F' : 'currentColor'}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+            />
+          </svg>
+        )}
       </button>
 
       <div className="p-3">
@@ -199,9 +263,17 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
 
         <button
           onClick={handleAddToCart}
-          className="w-full bg-[#D32F2F] text-white py-2 rounded-md hover:bg-[#B71C1C] transition font-semibold text-sm"
+          disabled={isAddingToCart || !product.inStock}
+          className="w-full bg-[#D32F2F] text-white py-2 rounded-md hover:bg-[#B71C1C] transition font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          Add to Cart
+          {isAddingToCart ? (
+            <>
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+              Adding...
+            </>
+          ) : (
+            'Add to Cart'
+          )}
         </button>
       </div>
     </div>

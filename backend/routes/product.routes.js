@@ -17,12 +17,17 @@ router.get('/:id', productController.getProduct);
 // @route   POST /api/products
 // @desc    Create product (Admin only)
 // @access  Private/Admin
-router.post('/', protect, authorize('admin'), upload.array('images', 5), productController.createProduct);
+router.post('/add', protect, authorize('admin'), upload.array('images', 5), productController.createProduct);
 
 // @route   PUT /api/products/:id
 // @desc    Update product (Admin only)
 // @access  Private/Admin
-router.put('/:id', protect, authorize('admin'), productController.updateProduct);
+router.put('/:id', protect, authorize('admin'), upload.array('images', 5), productController.updateProduct);
+
+// @route   DELETE /api/products/:id/images/:publicId
+// @desc    Delete specific image from product (Admin only)
+// @access  Private/Admin
+router.delete('/:id/images/:publicId', protect, authorize('admin'), productController.deleteProductImage);
 
 // @route   DELETE /api/products/:id
 // @desc    Delete product (Admin only)

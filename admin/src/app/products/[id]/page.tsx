@@ -1,29 +1,16 @@
 'use client';
 
-import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { fetchProductById, clearCurrentProduct } from '@/store/slices/productsSlice';
+import { useGetProductByIdQuery } from '@/store/api/productsApi';
+import ProtectedRoute from '@/middleware/ProtectedRoute';
+import { use } from 'react';
 
-export default function ProductDetailsPage({ params }: { params: { id: string } }) {
+function ProductDetailsContent({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
-  const dispatch = useAppDispatch();
-  const { currentProduct: product, loading } = useAppSelector((state) => state.products);
-  const { user } = useAppSelector((state) => state.auth);
-
-  useEffect(() => {
-    if (user?.role !== 'admin') {
-      router.push('/login');
-      return;
-    }
-
-    dispatch(fetchProductById(params.id));
-
-    return () => {
-      dispatch(clearCurrentProduct());
-    };
-  }, [dispatch, params.id, user, router]);
+  const {id} = use(params);
+  const { data, isLoading, error } = useGetProductByIdQuery(id);
+  const product = data?.data?.product;
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -32,10 +19,26 @@ export default function ProductDetailsPage({ params }: { params: { id: string } 
     }).format(price);
   };
 
-  if (loading || !product) {
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <div className="text-xl">Loading...</div>
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#D32F2F]"></div>
+      </div>
+    );
+  }
+
+  if (error || !product) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-center">
+          <p className="text-xl text-red-600 mb-4">Failed to load product</p>
+          <Link
+            href="/products"
+            className="text-[#D32F2F] hover:text-[#B71C1C] underline"
+          >
+            ← Back to Products
+          </Link>
+        </div>
       </div>
     );
   }
@@ -54,7 +57,7 @@ export default function ProductDetailsPage({ params }: { params: { id: string } 
           <div className="flex justify-between items-center">
             <h1 className="text-3xl font-bold text-[#D32F2F]">Product Details</h1>
             <Link
-              href={`/products/${params.id}/edit`}
+              href={`/products/${id}/edit`}
               className="bg-[#FFD700] text-[#8B4513] px-6 py-3 rounded-lg hover:bg-[#DAA520] transition-colors font-semibold"
             >
               Edit Product
@@ -217,5 +220,13 @@ export default function ProductDetailsPage({ params }: { params: { id: string } 
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ProductDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  return (
+    <ProtectedRoute requireAdmin={true}>
+      <ProductDetailsContent params={params} />
+    </ProtectedRoute>
   );
 }

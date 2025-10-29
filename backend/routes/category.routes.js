@@ -18,4 +18,14 @@ router.get('/:slug', categoryController.getCategoryBySlug);
 // @access  Private/Admin
 router.post('/', protect, authorize('admin'), categoryController.createCategory);
 
+// @route   PUT /api/categories/:id
+// @desc    Update category (Admin)
+// @access  Private/Admin
+router.put('/:id', protect, authorize('admin'), categoryController.updateCategory);
+
+// @route   DELETE /api/categories/:id
+// @desc    Delete category (Admin)
+// @access  Private/Admin
+router.delete('/:id', protect, authorize('admin'), categoryController.deleteCategory);
+
 module.exports = router;

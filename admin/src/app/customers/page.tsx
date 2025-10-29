@@ -1,27 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { fetchAllCustomers } from '@/store/slices/customersSlice';
+import { useState } from 'react';
+import { useGetAllCustomersQuery } from '@/store/api/customersApi';
+import ProtectedRoute from '@/middleware/ProtectedRoute';
 
-export default function CustomersPage() {
-  const router = useRouter();
-  const dispatch = useAppDispatch();
-  const { customers, loading } = useAppSelector((state) => state.customers);
-  const { user } = useAppSelector((state) => state.auth);
+function CustomersPageContent() {
+  const { data, isLoading } = useGetAllCustomersQuery();
+  const customers = data?.data.users || [];
   
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
-
-  useEffect(() => {
-    if (user?.role !== 'admin') {
-      router.push('/login');
-      return;
-    }
-    
-    dispatch(fetchAllCustomers());
-  }, [dispatch, user, router]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-IN', {
@@ -42,10 +30,10 @@ export default function CustomersPage() {
     return matchesSearch && matchesRole;
   });
 
-  if (loading && customers.length === 0) {
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <div className="text-xl">Loading...</div>
+        <div className="text-xl">Loading customers...</div>
       </div>
     );
   }
@@ -241,5 +229,13 @@ export default function CustomersPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CustomersPage() {
+  return (
+    <ProtectedRoute requireAdmin={true}>
+      <CustomersPageContent />
+    </ProtectedRoute>
   );
 }

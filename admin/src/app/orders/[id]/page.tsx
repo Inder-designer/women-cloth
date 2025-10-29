@@ -5,29 +5,24 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { fetchOrderById, updateOrderStatus, clearCurrentOrder } from '@/store/slices/ordersSlice';
+import ProtectedRoute from '@/middleware/ProtectedRoute';
 
-export default function OrderDetailsPage({ params }: { params: { id: string } }) {
+function OrderDetailsContent({ params }: { params: { id: string } }) {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { currentOrder: order, loading } = useAppSelector((state) => state.orders);
-  const { user } = useAppSelector((state) => state.auth);
 
   const [isUpdating, setIsUpdating] = useState(false);
   const [newStatus, setNewStatus] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
 
   useEffect(() => {
-    if (user?.role !== 'admin') {
-      router.push('/login');
-      return;
-    }
-
     dispatch(fetchOrderById(params.id));
 
     return () => {
       dispatch(clearCurrentOrder());
     };
-  }, [dispatch, params.id, user, router]);
+  }, [dispatch, params.id]);
 
   useEffect(() => {
     if (order) {
@@ -296,5 +291,13 @@ export default function OrderDetailsPage({ params }: { params: { id: string } })
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OrderDetailsPage({ params }: { params: { id: string } }) {
+  return (
+    <ProtectedRoute requireAdmin={true}>
+      <OrderDetailsContent params={params} />
+    </ProtectedRoute>
   );
 }

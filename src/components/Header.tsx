@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCart } from '@/contexts/CartContext';
-import { useWishlist } from '@/contexts/WishlistContext';
+import { useAuthContext } from '@/contexts/AuthContext';
+import { useGetCartQuery } from '@/store/api/cartApi';
+import { useGetWishlistQuery } from '@/store/api/wishlistApi';
+import { useLogoutMutation } from '@/store/api/authApi';
 import { products } from '@/data/products';
 
 export default function Header() {
@@ -12,10 +14,23 @@ export default function Header() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<typeof products>([]);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  const { cartItems } = useCart();
-  const { wishlistItems } = useWishlist();
+  const { isAuthenticated, user } = useAuthContext();
+  
+  // Only fetch cart and wishlist if authenticated
+  const { data: cart } = useGetCartQuery(undefined, {
+    skip: !isAuthenticated,
+  });
+  const { data: wishlist } = useGetWishlistQuery(undefined, {
+    skip: !isAuthenticated,
+  });
+  const [logout] = useLogoutMutation();
+
+  const cartItemsCount = cart?.totalItems || 0;
+  const wishlistItemsCount = wishlist?.products?.length || 0;
 
   // Handle search
   useEffect(() => {
@@ -36,6 +51,9 @@ export default function Header() {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setIsSearchOpen(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
       }
     };
 
@@ -101,19 +119,66 @@ export default function Header() {
               </svg>
             </button>
 
-            <Link href="/auth/login" className="hidden sm:block text-gray-700 hover:text-[#D32F2F] transition" title="Account">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </Link>
+            {isAuthenticated && user ? (
+              <div className="hidden sm:block relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="flex items-center gap-2 text-gray-700 hover:text-[#D32F2F] transition"
+                  title="Account"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span className="text-sm font-medium">{user.firstName}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {isUserMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50">
+                    <Link
+                      href="/profile"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-[#D32F2F] transition"
+                    >
+                      Profile
+                    </Link>
+                    <Link
+                      href="/orders"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-[#D32F2F] transition"
+                    >
+                      My Orders
+                    </Link>
+                    <hr className="my-1 border-gray-200" />
+                    <button
+                      onClick={async () => {
+                        await logout();
+                        setIsUserMenuOpen(false);
+                        router.push('/');
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link href="/auth/login" className="hidden sm:block text-gray-700 hover:text-[#D32F2F] transition" title="Account">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </Link>
+            )}
             
             <Link href="/wishlist" className="text-gray-700 hover:text-[#D32F2F] transition relative" title="Wishlist">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
               </svg>
-              {wishlistItems.length > 0 && (
+              {wishlistItemsCount > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 bg-[#D32F2F] text-white text-xs rounded-full h-4 w-4 flex items-center justify-center font-semibold">
-                  {wishlistItems.length}
+                  {wishlistItemsCount}
                 </span>
               )}
             </Link>
@@ -122,9 +187,9 @@ export default function Header() {
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
-              {cartItems.length > 0 && (
+              {cartItemsCount > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 bg-[#D32F2F] text-white text-xs rounded-full h-4 w-4 flex items-center justify-center font-semibold">
-                  {cartItems.length}
+                  {cartItemsCount}
                 </span>
               )}
             </Link>
@@ -251,9 +316,26 @@ export default function Header() {
             <Link href="/about" className="block py-2 text-gray-700 hover:text-[#D32F2F] transition font-medium text-sm">
               About
             </Link>
-            <Link href="/auth/login" className="block py-2 text-gray-700 hover:text-[#D32F2F] transition font-medium text-sm sm:hidden">
-              Account
-            </Link>
+            {isAuthenticated && user ? (
+              <>
+                <Link href="/profile" className="block py-2 text-gray-700 hover:text-[#D32F2F] transition font-medium text-sm sm:hidden">
+                  Account ({user.firstName})
+                </Link>
+                <button 
+                  onClick={async () => {
+                    await logout();
+                    setIsMenuOpen(false);
+                  }}
+                  className="block w-full text-left py-2 text-gray-700 hover:text-[#D32F2F] transition font-medium text-sm sm:hidden"
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <Link href="/auth/login" className="block py-2 text-gray-700 hover:text-[#D32F2F] transition font-medium text-sm sm:hidden">
+                Login
+              </Link>
+            )}
           </nav>
         )}
       </div>

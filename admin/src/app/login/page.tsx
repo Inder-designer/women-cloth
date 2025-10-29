@@ -1,14 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { login, clearError } from '@/store/slices/authSlice';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useLoginMutation } from '@/store/api/authApi';
+import AuthRoute from '@/middleware/AuthRoute';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
-  const dispatch = useAppDispatch();
-  const { loading, error } = useAppSelector((state) => state.auth);
+  const searchParams = useSearchParams();
+  const [login, { isLoading, error }] = useLoginMutation();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -19,10 +19,14 @@ export default function LoginPage() {
     e.preventDefault();
     
     try {
-      await dispatch(login(formData)).unwrap();
-      router.push('/');
+      await login(formData).unwrap();
+      
+      // Redirect to return URL or home after successful login
+      const returnUrl = searchParams.get('returnUrl') || '/';
+      router.push(returnUrl);
     } catch (err) {
-      // Error handled by Redux
+      // Error handled by RTK Query
+      console.error('Login failed:', err);
     }
   };
 
@@ -31,9 +35,6 @@ export default function LoginPage() {
       ...formData,
       [e.target.name]: e.target.value,
     });
-    if (error) {
-      dispatch(clearError());
-    }
   };
 
   return (
@@ -52,7 +53,9 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-              {error}
+              {'data' in error && error.data && typeof error.data === 'object' && 'message' in error.data
+                ? String(error.data.message)
+                : 'Login failed. Please try again.'}
             </div>
           )}
 
@@ -90,10 +93,10 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={isLoading}
             className="w-full bg-[#D32F2F] text-white py-3 rounded-lg font-semibold hover:bg-[#B71C1C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Logging in...' : 'Login'}
+            {isLoading ? 'Logging in...' : 'Login'}
           </button>
         </form>
 
@@ -109,5 +112,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <AuthRoute>
+      <LoginPageContent />
+    </AuthRoute>
   );
 }

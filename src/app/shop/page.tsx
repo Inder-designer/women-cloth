@@ -1,9 +1,10 @@
 'use client';
 
 import ProductCard from "@/components/ProductCard";
-import { products } from "@/data/products";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import { useGetAllProductsQuery } from "@/store/api/productsApi";
+import { transformProducts } from "@/lib/productHelpers";
 
 export default function ShopPage() {
   const searchParams = useSearchParams();
@@ -17,6 +18,29 @@ export default function ShopPage() {
   const [inStockOnly, setInStockOnly] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showFilters, setShowFilters] = useState<boolean>(true);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Fetch products from API
+  const { data, isLoading, error } = useGetAllProductsQuery({
+    page: currentPage,
+    limit: 12,
+    search: searchQuery || undefined,
+    category: selectedCategory !== 'all' ? selectedCategory : undefined,
+    minPrice: priceRange[0] > 0 ? priceRange[0] : undefined,
+    maxPrice: priceRange[1] < 500 ? priceRange[1] : undefined,
+    sizes: selectedSizes.length > 0 ? selectedSizes : undefined,
+    colors: selectedColors.length > 0 ? selectedColors : undefined,
+    inStock: inStockOnly ? true : undefined,
+    sort: sortBy === 'price-low' ? 'price-asc' 
+        : sortBy === 'price-high' ? 'price-desc'
+        : sortBy === 'newest' ? 'newest'
+        : sortBy === 'popular' ? 'popular'
+        : undefined,
+  });
+
+  // Transform products to frontend format
+  const products = data?.products ? transformProducts(data.products) : [];
+  const pagination = data?.pagination;
 
   // Update category from URL on mount
   useEffect(() => {
@@ -25,6 +49,11 @@ export default function ShopPage() {
       setSelectedCategory(category);
     }
   }, [searchParams]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory, sortBy, priceRange, selectedSizes, selectedColors, inStockOnly, searchQuery]);
 
   const categories = [
     { id: "all", name: "All Products" },
@@ -65,9 +94,10 @@ export default function ShopPage() {
     setSelectedSizes([]);
     setSelectedColors([]);
     setInStockOnly(false);
+    setCurrentPage(1);
   };
 
-  const activeFiltersCount = useMemo(() => {
+  const activeFiltersCount = () => {
     let count = 0;
     if (selectedCategory !== "all") count++;
     if (priceRange[0] !== 0 || priceRange[1] !== 500) count++;
@@ -75,50 +105,7 @@ export default function ShopPage() {
     if (selectedColors.length > 0) count++;
     if (inStockOnly) count++;
     return count;
-  }, [selectedCategory, priceRange, selectedSizes, selectedColors, inStockOnly]);
-
-  const filteredProducts = products
-    .filter(product => {
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchesSearch = 
-          product.name.toLowerCase().includes(query) ||
-          product.category.toLowerCase().includes(query) ||
-          product.description.toLowerCase().includes(query);
-        if (!matchesSearch) return false;
-      }
-      // Category filter
-      if (selectedCategory === "all") return true;
-      return product.category === selectedCategory;
-    })
-    .filter(product => product.price >= priceRange[0] && product.price <= priceRange[1])
-    .filter(product => {
-      if (selectedSizes.length === 0) return true;
-      return selectedSizes.some(size => product.sizes?.includes(size));
-    })
-    .filter(product => {
-      if (selectedColors.length === 0) return true;
-      return selectedColors.some(color => product.colors?.includes(color));
-    })
-    .filter(product => {
-      if (!inStockOnly) return true;
-      return product.inStock;
-    })
-    .sort((a, b) => {
-      switch (sortBy) {
-        case "price-low":
-          return a.price - b.price;
-        case "price-high":
-          return b.price - a.price;
-        case "name":
-          return a.name.localeCompare(b.name);
-        case "newest":
-          return parseInt(b.id) - parseInt(a.id);
-        default:
-          return 0;
-      }
-    });
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -189,9 +176,9 @@ export default function ShopPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
               </svg>
               {showFilters ? 'Hide' : 'Show'} Filters
-              {activeFiltersCount > 0 && (
+              {activeFiltersCount() > 0 && (
                 <span className="bg-white text-[#D32F2F] px-1.5 py-0.5 rounded-full text-xs font-bold">
-                  {activeFiltersCount}
+                  {activeFiltersCount()}
                 </span>
               )}
             </button>
@@ -206,12 +193,12 @@ export default function ShopPage() {
             <div className="bg-white rounded-lg shadow-md p-4 sticky top-24 space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-bold text-gray-900 font-playfair">Filters</h2>
-                {activeFiltersCount > 0 && (
+                {activeFiltersCount() > 0 && (
                   <button
                     onClick={resetFilters}
                     className="text-xs text-[#D32F2F] hover:underline font-semibold"
                   >
-                    Clear All ({activeFiltersCount})
+                    Clear All ({activeFiltersCount()})
                   </button>
                 )}
               </div>
@@ -399,11 +386,17 @@ export default function ShopPage() {
             <div className="bg-white rounded-lg shadow-md p-3 mb-4 flex flex-col sm:flex-row justify-between items-center gap-3">
               <div className="flex items-center gap-3">
                 <p className="text-gray-600 text-sm">
-                  <span className="font-semibold text-gray-900">{filteredProducts.length}</span> products found
+                  {isLoading ? (
+                    <span className="text-gray-400">Loading...</span>
+                  ) : (
+                    <>
+                      <span className="font-semibold text-gray-900">{pagination?.total || 0}</span> products found
+                    </>
+                  )}
                 </p>
-                {activeFiltersCount > 0 && (
+                {activeFiltersCount() > 0 && (
                   <span className="px-2 py-0.5 bg-[#D32F2F] text-white text-xs font-semibold rounded-full">
-                    {activeFiltersCount} {activeFiltersCount === 1 ? 'filter' : 'filters'} active
+                    {activeFiltersCount()} {activeFiltersCount() === 1 ? 'filter' : 'filters'} active
                   </span>
                 )}
               </div>
@@ -440,18 +433,107 @@ export default function ShopPage() {
               </div>
             </div>
 
-            {/* Products */}
-            {filteredProducts.length > 0 ? (
-              <div className={
-                viewMode === 'grid' 
-                  ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" 
-                  : "space-y-3"
-              }>
-                {filteredProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} viewMode={viewMode} />
+            {/* Loading State */}
+            {isLoading && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-lg shadow-md p-4 animate-pulse">
+                    <div className="aspect-square bg-gray-200 rounded-lg mb-4"></div>
+                    <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                    <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                  </div>
                 ))}
               </div>
-            ) : (
+            )}
+
+            {/* Error State */}
+            {error && (
+              <div className="bg-white rounded-lg shadow-md p-12 text-center">
+                <div className="max-w-md mx-auto">
+                  <svg className="w-24 h-24 mx-auto text-red-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2 font-playfair">Oops! Something went wrong</h3>
+                  <p className="text-gray-600 mb-6 text-sm">
+                    We're having trouble loading the products. Please try again later.
+                  </p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="inline-flex items-center gap-2 px-6 py-2 bg-[#D32F2F] text-white rounded-md hover:bg-[#B71C1C] transition font-semibold shadow-md hover:shadow-lg text-sm"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Products */}
+            {!isLoading && !error && products.length > 0 && (
+              <>
+                <div className={
+                  viewMode === 'grid' 
+                    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" 
+                    : "space-y-3"
+                }>
+                  {products.map((product) => (
+                    <ProductCard key={product.id} product={product} viewMode={viewMode} />
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                {pagination && pagination.pages > 1 && (
+                  <div className="mt-8 flex justify-center items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    
+                    <div className="flex gap-1">
+                      {[...Array(pagination.pages)].map((_, i) => {
+                        const page = i + 1;
+                        // Show first, last, current, and pages around current
+                        if (
+                          page === 1 ||
+                          page === pagination.pages ||
+                          (page >= currentPage - 1 && page <= currentPage + 1)
+                        ) {
+                          return (
+                            <button
+                              key={page}
+                              onClick={() => setCurrentPage(page)}
+                              className={`px-4 py-2 border rounded-md text-sm font-medium ${
+                                page === currentPage
+                                  ? 'bg-[#D32F2F] text-white border-[#D32F2F]'
+                                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          );
+                        } else if (page === currentPage - 2 || page === currentPage + 2) {
+                          return <span key={page} className="px-2 py-2 text-gray-500">...</span>;
+                        }
+                        return null;
+                      })}
+                    </div>
+
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(pagination.pages, prev + 1))}
+                      disabled={currentPage === pagination.pages}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* No Results */}
+            {!isLoading && !error && products.length === 0 && (
               <div className="bg-white rounded-lg shadow-md p-12 text-center">
                 <div className="max-w-md mx-auto">
                   <svg className="w-24 h-24 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

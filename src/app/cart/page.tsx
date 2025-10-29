@@ -2,19 +2,67 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useCart } from '@/contexts/CartContext';
-import { useWishlist } from '@/contexts/WishlistContext';
+import { useGetCartQuery, useUpdateCartItemMutation, useRemoveFromCartMutation } from '@/store/api/cartApi';
+import { useAddToWishlistMutation } from '@/store/api/wishlistApi';
+import { getErrorMessage } from '@/store/utils';
 
 export default function CartPage() {
-  const { cartItems, removeFromCart, updateQuantity, getCartTotal } = useCart();
-  const { addToWishlist } = useWishlist();
+  const { data: cart, isLoading, error } = useGetCartQuery();
+  const [updateCartItem, { isLoading: isUpdating }] = useUpdateCartItemMutation();
+  const [removeFromCart, { isLoading: isRemoving }] = useRemoveFromCartMutation();
+  const [addToWishlist] = useAddToWishlistMutation();
 
-  const handleMoveToWishlist = (item: any) => {
-    addToWishlist(item.product);
-    removeFromCart(item.product.id);
+  const handleUpdateQuantity = async (itemId: string, newQuantity: number) => {
+    if (newQuantity < 1) return;
+    try {
+      await updateCartItem({ itemId, quantity: newQuantity }).unwrap();
+    } catch (err) {
+      console.error('Failed to update cart item:', err);
+    }
   };
 
-  if (cartItems.length === 0) {
+  const handleRemoveItem = async (itemId: string) => {
+    try {
+      await removeFromCart(itemId).unwrap();
+    } catch (err) {
+      console.error('Failed to remove cart item:', err);
+    }
+  };
+
+  const handleMoveToWishlist = async (itemId: string, productId: string) => {
+    try {
+      await addToWishlist({ productId }).unwrap();
+      await removeFromCart(itemId).unwrap();
+    } catch (err) {
+      console.error('Failed to move to wishlist:', err);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="container mx-auto px-4">
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#D32F2F]"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="container mx-auto px-4">
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded">
+            {getErrorMessage(error)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!cart || cart.items.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 py-12">
         <div className="container mx-auto px-4">
@@ -61,33 +109,34 @@ export default function CartPage() {
           {/* Cart Items */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-md">
-              {cartItems.map((item, index) => (
+              {cart.items.map((item) => (
                 <div
-                  key={`${item.product.id}-${index}`}
+                  key={item._id}
                   className="flex flex-col sm:flex-row gap-4 p-6 border-b last:border-b-0"
                 >
                   <div className="relative w-full sm:w-32 h-32 shrink-0">
                     <Image
-                      src={item.product.image}
-                      alt={item.product.name}
+                      src={item.product.images[0]?.url || '/placeholder.jpg'}
+                      alt={item.product.images[0]?.alt || item.product.name}
                       fill
                       className="object-cover rounded-md"
                     />
                   </div>
 
                   <div className="flex-1">
-                    <Link href={`/product/${item.product.id}`}>
+                    <Link href={`/product/${item.product.slug}`}>
                       <h3 className="text-lg font-semibold text-gray-900 hover:text-[#D32F2F] transition">
                         {item.product.name}
                       </h3>
                     </Link>
-                    <p className="text-sm text-gray-500 mt-1">{item.product.category}</p>
-                    <div className="flex gap-4 mt-2 text-sm text-gray-600">
-                      <span>Size: {item.size}</span>
-                      <span>Color: {item.color}</span>
-                    </div>
+                    {(item.size || item.color) && (
+                      <div className="flex gap-4 mt-2 text-sm text-gray-600">
+                        {item.size && <span>Size: {item.size}</span>}
+                        {item.color && <span>Color: {item.color}</span>}
+                      </div>
+                    )}
                     <p className="text-lg font-bold text-[#D32F2F] mt-2">
-                      ${item.product.price}
+                      ${item.price.toFixed(2)}
                     </p>
                   </div>
 
@@ -95,8 +144,9 @@ export default function CartPage() {
                     {/* Quantity Controls */}
                     <div className="flex items-center border border-gray-300 rounded-md">
                       <button
-                        onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
-                        className="px-3 py-1 hover:bg-gray-100 transition"
+                        onClick={() => handleUpdateQuantity(item._id, item.quantity - 1)}
+                        disabled={isUpdating || item.quantity <= 1}
+                        className="px-3 py-1 hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         -
                       </button>
@@ -104,8 +154,9 @@ export default function CartPage() {
                         {item.quantity}
                       </span>
                       <button
-                        onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                        className="px-3 py-1 hover:bg-gray-100 transition"
+                        onClick={() => handleUpdateQuantity(item._id, item.quantity + 1)}
+                        disabled={isUpdating || item.quantity >= item.product.stock}
+                        className="px-3 py-1 hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         +
                       </button>
@@ -114,8 +165,9 @@ export default function CartPage() {
                     {/* Action Buttons */}
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleMoveToWishlist(item)}
-                        className="p-2 border border-gray-300 rounded-md hover:bg-gray-50 transition group"
+                        onClick={() => handleMoveToWishlist(item._id, item.product._id)}
+                        disabled={isRemoving}
+                        className="p-2 border border-gray-300 rounded-md hover:bg-gray-50 transition group disabled:opacity-50"
                         title="Move to Wishlist"
                       >
                         <svg
@@ -133,8 +185,9 @@ export default function CartPage() {
                         </svg>
                       </button>
                       <button
-                        onClick={() => removeFromCart(item.product.id)}
-                        className="p-2 border border-gray-300 rounded-md hover:bg-red-50 transition group"
+                        onClick={() => handleRemoveItem(item._id)}
+                        disabled={isRemoving}
+                        className="p-2 border border-gray-300 rounded-md hover:bg-red-50 transition group disabled:opacity-50"
                         title="Remove"
                       >
                         <svg
@@ -163,27 +216,27 @@ export default function CartPage() {
 
               <div className="space-y-3 mb-4">
                 <div className="flex justify-between text-gray-600">
-                  <span>Subtotal</span>
-                  <span>${getCartTotal().toFixed(2)}</span>
+                  <span>Subtotal ({cart.totalItems} items)</span>
+                  <span>${cart.totalPrice.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Shipping</span>
                   <span>Free</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
-                  <span>Tax</span>
-                  <span>${(getCartTotal() * 0.1).toFixed(2)}</span>
+                  <span>Tax (10%)</span>
+                  <span>${(cart.totalPrice * 0.1).toFixed(2)}</span>
                 </div>
                 <div className="border-t pt-3 flex justify-between text-lg font-bold">
                   <span>Total</span>
                   <span className="text-[#D32F2F]">
-                    ${(getCartTotal() * 1.1).toFixed(2)}
+                    ${(cart.totalPrice * 1.1).toFixed(2)}
                   </span>
                 </div>
               </div>
 
               <Link
-                href="/checkout/payment"
+                href="/checkout/process"
                 className="block w-full bg-[#D32F2F] text-white text-center py-3 rounded-md hover:bg-[#B71C1C] transition font-semibold"
               >
                 Proceed to Checkout

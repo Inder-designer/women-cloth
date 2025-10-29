@@ -1,13 +1,15 @@
-const Wishlist = require('../models/Wishlist');
-const Product = require('../models/Product');
+const Wishlist = require("../models/Wishlist");
+const Product = require("../models/Product");
 
 // @desc    Get user wishlist
 // @route   GET /api/wishlist
 // @access  Private
 exports.getWishlist = async (req, res, next) => {
   try {
-    let wishlist = await Wishlist.findOne({ user: req.user.id })
-      .populate('products', 'name slug price originalPrice images rating inStock');
+    let wishlist = await Wishlist.findOne({ user: req.user.id }).populate(
+      "products",
+      "name slug price originalPrice images rating inStock"
+    );
 
     if (!wishlist) {
       wishlist = await Wishlist.create({ user: req.user.id, products: [] });
@@ -15,7 +17,7 @@ exports.getWishlist = async (req, res, next) => {
 
     res.json({
       success: true,
-      data: { wishlist }
+      data: wishlist,
     });
   } catch (error) {
     next(error);
@@ -27,14 +29,14 @@ exports.getWishlist = async (req, res, next) => {
 // @access  Private
 exports.addToWishlist = async (req, res, next) => {
   try {
-    const { productId } = req.params;
+    const { productId } = req.body;
 
     // Check if product exists
     const product = await Product.findById(productId);
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Product not found'
+        message: "Product not found",
       });
     }
 
@@ -43,14 +45,14 @@ exports.addToWishlist = async (req, res, next) => {
     if (!wishlist) {
       wishlist = await Wishlist.create({
         user: req.user.id,
-        products: [productId]
+        products: [productId],
       });
     } else {
       // Check if product already in wishlist
       if (wishlist.products.includes(productId)) {
         return res.status(400).json({
           success: false,
-          message: 'Product already in wishlist'
+          message: "Product already in wishlist",
         });
       }
 
@@ -58,12 +60,15 @@ exports.addToWishlist = async (req, res, next) => {
       await wishlist.save();
     }
 
-    await wishlist.populate('products', 'name slug price originalPrice images rating inStock');
+    await wishlist.populate(
+      "products",
+      "name slug price originalPrice images rating inStock"
+    );
 
     res.json({
       success: true,
-      message: 'Product added to wishlist',
-      data: { wishlist }
+      message: "Product added to wishlist",
+      data: wishlist,
     });
   } catch (error) {
     next(error);
@@ -82,21 +87,24 @@ exports.removeFromWishlist = async (req, res, next) => {
     if (!wishlist) {
       return res.status(404).json({
         success: false,
-        message: 'Wishlist not found'
+        message: "Wishlist not found",
       });
     }
 
     wishlist.products = wishlist.products.filter(
-      product => product.toString() !== productId
+      (product) => product.toString() !== productId
     );
 
     await wishlist.save();
-    await wishlist.populate('products', 'name slug price originalPrice images rating inStock');
+    await wishlist.populate(
+      "products",
+      "name slug price originalPrice images rating inStock"
+    );
 
     res.json({
       success: true,
-      message: 'Product removed from wishlist',
-      data: { wishlist }
+      message: "Product removed from wishlist",
+      data: wishlist,
     });
   } catch (error) {
     next(error);
@@ -113,7 +121,7 @@ exports.clearWishlist = async (req, res, next) => {
     if (!wishlist) {
       return res.status(404).json({
         success: false,
-        message: 'Wishlist not found'
+        message: "Wishlist not found",
       });
     }
 
@@ -122,8 +130,8 @@ exports.clearWishlist = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: 'Wishlist cleared',
-      data: { wishlist }
+      message: "Wishlist cleared",
+      data: wishlist,
     });
   } catch (error) {
     next(error);

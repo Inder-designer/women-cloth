@@ -1,39 +1,38 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import Link from 'next/link';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { fetchProducts, deleteProduct } from '@/store/slices/productsSlice';
+import { useGetProductsQuery, useDeleteProductMutation } from '@/store/api/productsApi';
+import ProtectedRoute from '@/middleware/ProtectedRoute';
 
-export default function ProductsPage() {
-  const router = useRouter();
-  const dispatch = useAppDispatch();
-  const { products, loading, pagination } = useAppSelector((state) => state.products);
-  const { user } = useAppSelector((state) => state.auth);
-  
+function ProductsPageContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
 
-  useEffect(() => {
-    if (user?.role !== 'admin') {
-      router.push('/login');
-      return;
-    }
-    
-    dispatch(fetchProducts({ page: currentPage, limit: 12, search: searchTerm }));
-  }, [dispatch, currentPage, user, router]);
+  const { data, isLoading, refetch } = useGetProductsQuery({
+    page: currentPage,
+    limit: 12,
+    search: searchTerm,
+  });
+
+  const [deleteProduct] = useDeleteProductMutation();
+
+  const products = data?.data.products || [];
+  const pagination = data?.data.pagination;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setCurrentPage(1);
-    dispatch(fetchProducts({ page: 1, limit: 12, search: searchTerm }));
+    refetch();
   };
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
-      await dispatch(deleteProduct(id));
-      dispatch(fetchProducts({ page: currentPage, limit: 12, search: searchTerm }));
+      try {
+        await deleteProduct(id).unwrap();
+      } catch (error) {
+        console.error('Failed to delete product:', error);
+      }
     }
   };
 
@@ -44,7 +43,7 @@ export default function ProductsPage() {
     }).format(price);
   };
 
-  if (loading && products.length === 0) {
+  if (isLoading && products.length === 0) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="text-xl">Loading...</div>
@@ -62,7 +61,7 @@ export default function ProductsPage() {
             <p className="text-gray-600 mt-1">Manage your product inventory</p>
           </div>
           <Link
-            href="/products/create"
+            href="/products/add"
             className="bg-[#D32F2F] text-white px-6 py-3 rounded-lg hover:bg-[#B71C1C] transition-colors"
           >
             + Add Product
@@ -119,10 +118,10 @@ export default function ProductsPage() {
                   <tr key={product._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="h-12 w-12 flex-shrink-0">
+                        <div className="h-12 w-12 shrink-0">
                           <img
                             className="h-12 w-12 rounded-lg object-cover"
-                            src={product.images[0]?.url || '/placeholder.png'}
+                            src={product.images[0].url || '/placeholder.png'}
                             alt={product.name}
                           />
                         </div>
@@ -153,12 +152,12 @@ export default function ProductsPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
                         className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          product.inStock
+                          product.stock > 0
                             ? 'bg-green-100 text-green-800'
                             : 'bg-red-100 text-red-800'
                         }`}
                       >
-                        {product.inStock ? 'In Stock' : 'Out of Stock'}
+                        {product.stock > 0 ? 'In Stock' : 'Out of Stock'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -188,20 +187,20 @@ export default function ProductsPage() {
           </div>
 
           {/* Pagination */}
-          {pagination.pages > 1 && (
+          {pagination && pagination.totalPages > 1 && (
             <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
               <div className="flex-1 flex justify-between sm:hidden">
                 <button
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                 >
                   Previous
                 </button>
                 <button
-                  onClick={() => setCurrentPage((p) => Math.min(pagination.pages, p + 1))}
-                  disabled={currentPage === pagination.pages}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                  onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
+                  disabled={currentPage === pagination.totalPages}
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                 >
                   Next
                 </button>
@@ -210,7 +209,7 @@ export default function ProductsPage() {
                 <div>
                   <p className="text-sm text-gray-700">
                     Showing page <span className="font-medium">{currentPage}</span> of{' '}
-                    <span className="font-medium">{pagination.pages}</span> ({pagination.total} total products)
+                    <span className="font-medium">{pagination.totalPages}</span> ({pagination.totalProducts} total products)
                   </p>
                 </div>
                 <div>
@@ -218,14 +217,14 @@ export default function ProductsPage() {
                     <button
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
                     >
                       Previous
                     </button>
                     <button
-                      onClick={() => setCurrentPage((p) => Math.min(pagination.pages, p + 1))}
-                      disabled={currentPage === pagination.pages}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
+                      onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
+                      disabled={currentPage === pagination.totalPages}
+                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
                     >
                       Next
                     </button>
@@ -237,5 +236,13 @@ export default function ProductsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <ProtectedRoute requireAdmin={true}>
+      <ProductsPageContent />
+    </ProtectedRoute>
   );
 }

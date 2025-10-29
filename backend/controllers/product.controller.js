@@ -1,4 +1,5 @@
 const Product = require('../models/Product');
+const { deleteImage } = require('../config/cloudinary');
 
 // @desc    Get all products with filters
 // @route   GET /api/products
@@ -116,10 +117,22 @@ exports.createProduct = async (req, res, next) => {
   try {
     const productData = req.body;
 
-    // Add image URLs
-    if (req.files) {
+    // Parse JSON fields if they are strings
+    if (typeof productData.sizes === 'string') {
+      productData.sizes = JSON.parse(productData.sizes);
+    }
+    if (typeof productData.colors === 'string') {
+      productData.colors = JSON.parse(productData.colors);
+    }
+    if (typeof productData.tags === 'string') {
+      productData.tags = JSON.parse(productData.tags);
+    }
+
+    // Add Cloudinary image URLs
+    if (req.files && req.files.length > 0) {
       productData.images = req.files.map(file => ({
-        url: `/uploads/${file.filename}`,
+        url: file.path, // Cloudinary URL
+        publicId: file.filename, // Cloudinary public ID for deletion
         alt: productData.name
       }));
     }
@@ -141,9 +154,41 @@ exports.createProduct = async (req, res, next) => {
 // @access  Private/Admin
 exports.updateProduct = async (req, res, next) => {
   try {
+    const productData = req.body;
+
+    // Parse JSON fields if they are strings
+    if (typeof productData.sizes === 'string') {
+      productData.sizes = JSON.parse(productData.sizes);
+    }
+    if (typeof productData.colors === 'string') {
+      productData.colors = JSON.parse(productData.colors);
+    }
+    if (typeof productData.tags === 'string') {
+      productData.tags = JSON.parse(productData.tags);
+    }
+
+    // If new images are uploaded, add them
+    if (req.files && req.files.length > 0) {
+      const newImages = req.files.map(file => ({
+        url: file.path,
+        publicId: file.filename,
+        alt: productData.name || 'Product image'
+      }));
+      
+      // If product data has existing images, append new ones
+      if (productData.images) {
+        const existingImages = typeof productData.images === 'string' 
+          ? JSON.parse(productData.images) 
+          : productData.images;
+        productData.images = [...existingImages, ...newImages];
+      } else {
+        productData.images = newImages;
+      }
+    }
+
     const product = await Product.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      productData,
       { new: true, runValidators: true }
     );
 
@@ -169,7 +214,7 @@ exports.updateProduct = async (req, res, next) => {
 // @access  Private/Admin
 exports.deleteProduct = async (req, res, next) => {
   try {
-    const product = await Product.findByIdAndDelete(req.params.id);
+    const product = await Product.findById(req.params.id);
 
     if (!product) {
       return res.status(404).json({
@@ -178,9 +223,63 @@ exports.deleteProduct = async (req, res, next) => {
       });
     }
 
+    // Delete images from Cloudinary
+    if (product.images && product.images.length > 0) {
+      for (const image of product.images) {
+        if (image.publicId) {
+          await deleteImage(image.publicId);
+        }
+      }
+    }
+
+    await product.deleteOne();
+
     res.json({
       success: true,
       message: 'Product deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Delete specific image from product (Admin only)
+// @route   DELETE /api/products/:id/images/:publicId
+// @access  Private/Admin
+exports.deleteProductImage = async (req, res, next) => {
+  try {
+    const { id, publicId } = req.params;
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    // Find and remove the image from product
+    const imageIndex = product.images.findIndex(img => img.publicId === publicId);
+
+    if (imageIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: 'Image not found'
+      });
+    }
+
+    // Delete from Cloudinary
+    await deleteImage(publicId);
+
+    // Remove from product images array
+    product.images.splice(imageIndex, 1);
+    await product.save();
+
+    res.json({
+      success: true,
+      message: 'Image deleted successfully',
+      data: { product }
     });
   } catch (error) {
     next(error);

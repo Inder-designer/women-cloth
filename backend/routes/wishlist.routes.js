@@ -11,7 +11,7 @@ router.get('/', protect, wishlistController.getWishlist);
 // @route   POST /api/wishlist/:productId
 // @desc    Add product to wishlist
 // @access  Private
-router.post('/:productId', protect, wishlistController.addToWishlist);
+router.post('/', protect, wishlistController.addToWishlist);
 
 // @route   DELETE /api/wishlist/:productId
 // @desc    Remove product from wishlist

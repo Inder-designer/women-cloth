@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Playfair_Display, Poppins } from "next/font/google";
 import "./globals.css";
+import { ReduxProvider } from "@/store/provider";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { WishlistProvider } from "@/contexts/WishlistContext";
 import Header from "@/components/Header";
@@ -35,13 +37,17 @@ export default function RootLayout({
       <body
         className={`${playfair.variable} ${poppins.variable} antialiased font-poppins`}
       >
-        <CartProvider>
-          <WishlistProvider>
-            <Header />
-            {children}
-            <Footer />
-          </WishlistProvider>
-        </CartProvider>
+        <ReduxProvider>
+          <AuthProvider>
+            <CartProvider>
+              <WishlistProvider>
+                <Header />
+                {children}
+                <Footer />
+              </WishlistProvider>
+            </CartProvider>
+          </AuthProvider>
+        </ReduxProvider>
       </body>
     </html>
   );

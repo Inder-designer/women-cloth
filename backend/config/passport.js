@@ -6,11 +6,13 @@ module.exports = (passport) => {
   passport.use(
     new LocalStrategy({ usernameField: 'email' }, async (email, password, done) => {
       try {
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email }).select('+password');
         
         if (!user) {
           return done(null, false, { message: 'Invalid email or password' });
         }
+        console.log(user);
+        
 
         const isMatch = await user.comparePassword(password);
         
@@ -34,6 +36,7 @@ module.exports = (passport) => {
   passport.deserializeUser(async (id, done) => {
     try {
       const user = await User.findById(id).select('-password');
+      console.log(user);
       done(null, user);
     } catch (error) {
       done(error);
