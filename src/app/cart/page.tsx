@@ -11,6 +11,8 @@ export default function CartPage() {
   const [updateCartItem, { isLoading: isUpdating }] = useUpdateCartItemMutation();
   const [removeFromCart, { isLoading: isRemoving }] = useRemoveFromCartMutation();
   const [addToWishlist] = useAddToWishlistMutation();
+  console.log(cart);
+  
 
   const handleUpdateQuantity = async (itemId: string, newQuantity: number) => {
     if (newQuantity < 1) return;
@@ -112,30 +114,28 @@ export default function CartPage() {
               {cart.items.map((item) => (
                 <div
                   key={item._id}
-                  className="flex flex-col sm:flex-row gap-4 p-6 border-b last:border-b-0"
+                  className="flex flex-col sm:flex-row gap-4 p-4 border-b last:border-b-0"
                 >
-                  <div className="relative w-full sm:w-32 h-32 shrink-0">
-                    <Image
+                  <div className="relative shrink-0">
+                    <img
                       src={item.product.images[0]?.url || '/placeholder.jpg'}
                       alt={item.product.images[0]?.alt || item.product.name}
-                      fill
-                      className="object-cover rounded-md"
+                      className="object-cover rounded-md w-20 h-20"
                     />
                   </div>
 
                   <div className="flex-1">
                     <Link href={`/product/${item.product.slug}`}>
-                      <h3 className="text-lg font-semibold text-gray-900 hover:text-[#D32F2F] transition">
+                      <h3 className="font-semibold text-gray-900 hover:text-[#D32F2F] transition">
                         {item.product.name}
                       </h3>
                     </Link>
                     {(item.size || item.color) && (
-                      <div className="flex gap-4 mt-2 text-sm text-gray-600">
+                      <div className="flex gap-4 text-sm text-gray-600 mt-1">
                         {item.size && <span>Size: {item.size}</span>}
-                        {item.color && <span>Color: {item.color}</span>}
                       </div>
                     )}
-                    <p className="text-lg font-bold text-[#D32F2F] mt-2">
+                    <p className="text-lg font-bold text-[#D32F2F] mt-1">
                       ${item.price.toFixed(2)}
                     </p>
                   </div>
@@ -146,17 +146,17 @@ export default function CartPage() {
                       <button
                         onClick={() => handleUpdateQuantity(item._id, item.quantity - 1)}
                         disabled={isUpdating || item.quantity <= 1}
-                        className="px-3 py-1 hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-2 py-0.5 hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed rounded-l-md"
                       >
                         -
                       </button>
-                      <span className="px-4 py-1 border-x border-gray-300">
+                      <span className="px-4 border-x border-gray-300 text-sm">
                         {item.quantity}
                       </span>
                       <button
                         onClick={() => handleUpdateQuantity(item._id, item.quantity + 1)}
                         disabled={isUpdating || item.quantity >= item.product.stock}
-                        className="px-3 py-1 hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-2 py-0.5 hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed rounded-r-md"
                       >
                         +
                       </button>
@@ -216,8 +216,8 @@ export default function CartPage() {
 
               <div className="space-y-3 mb-4">
                 <div className="flex justify-between text-gray-600">
-                  <span>Subtotal ({cart.totalItems} items)</span>
-                  <span>${cart.totalPrice.toFixed(2)}</span>
+                  <span>Subtotal ({cart.items.length} items)</span>
+                  <span>${cart.totalAmount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Shipping</span>
@@ -225,12 +225,12 @@ export default function CartPage() {
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Tax (10%)</span>
-                  <span>${(cart.totalPrice * 0.1).toFixed(2)}</span>
+                  <span>${(cart.totalAmount * 0.1).toFixed(2)}</span>
                 </div>
                 <div className="border-t pt-3 flex justify-between text-lg font-bold">
                   <span>Total</span>
                   <span className="text-[#D32F2F]">
-                    ${(cart.totalPrice * 1.1).toFixed(2)}
+                    ${(cart.totalAmount * 1.1).toFixed(2)}
                   </span>
                 </div>
               </div>

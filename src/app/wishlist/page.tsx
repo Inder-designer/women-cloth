@@ -127,13 +127,13 @@ export default function WishlistPage() {
             <div key={item._id} className="bg-white rounded-lg shadow-md overflow-hidden">
               <div className="relative h-64">
                 <img
-                  src={item.product.images[0]?.url || '/placeholder.jpg'}
-                  alt={item.product.images[0]?.alt || item.product.name}
+                  src={item.images[0]?.url || '/placeholder.jpg'}
+                  alt={item.images[0]?.alt || item.name}
                 //   fill
                   className="object-cover w-full h-full"
                 />
                 <button
-                  onClick={() => handleRemoveFromWishlist(item.product._id)}
+                  onClick={() => handleRemoveFromWishlist(item._id)}
                   disabled={isRemoving}
                   className="absolute top-4 right-4 bg-white p-2 rounded-full shadow-md hover:bg-gray-100 transition disabled:opacity-50"
                 >
@@ -153,28 +153,28 @@ export default function WishlistPage() {
               </div>
 
               <div className="p-4">
-                <Link href={`/product/${item.product.slug}`}>
+                <Link href={`/product/${item.slug}`}>
                   <h3 className="text-lg font-semibold text-gray-900 mb-2 hover:text-[#D32F2F] transition">
-                    {item.product.name}
+                    {item.name}
                   </h3>
                 </Link>
 
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <span className="text-xl font-bold text-[#D32F2F]">
-                      ${item.product.price.toFixed(2)}
+                      ${item.price.toFixed(2)}
                     </span>
-                    {item.product.comparePrice && (
+                    {item.comparePrice && (
                       <span className="text-sm text-gray-500 line-through ml-2">
-                        ${item.product.comparePrice.toFixed(2)}
+                        ${item.comparePrice.toFixed(2)}
                       </span>
                     )}
                   </div>
                 </div>
 
-                {item.product.inStock ? (
+                {item.inStock ? (
                   <button
-                    onClick={() => handleMoveToCart(item.product)}
+                    onClick={() => handleMoveToCart(item)}
                     className="w-full bg-[#D32F2F] text-white py-2 rounded-md hover:bg-[#B71C1C] transition font-semibold flex items-center justify-center gap-2"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -21,18 +21,21 @@ export const categoriesApi = baseApi.injectEndpoints({
     // Get all categories
     getAllCategories: builder.query<Category[], { isActive?: boolean }>({
       query: ({ isActive = true }) => `/categories?isActive=${isActive}`,
+      transformResponse: (response: { success: boolean; data: { categories: Category[] } }) => response.data.categories,
       providesTags: ['Categories'],
     }),
 
     // Get category by slug
     getCategoryBySlug: builder.query<Category, string>({
       query: (slug) => `/categories/${slug}`,
+      transformResponse: (response: { success: boolean; data: Category }) => response.data,
       providesTags: (result, error, slug) => [{ type: 'Category', id: slug }],
     }),
 
     // Get category tree (with subcategories)
     getCategoryTree: builder.query<Category[], void>({
       query: () => '/categories/tree',
+      transformResponse: (response: { success: boolean; data: Category[] }) => response.data,
       providesTags: ['Categories'],
     }),
   }),

@@ -1,20 +1,23 @@
-const Product = require('../models/Product');
-const { deleteImage } = require('../config/cloudinary');
+const Product = require("../models/Product");
+const Category = require("../models/Category");
+const { deleteImage } = require("../config/cloudinary");
 
 // @desc    Get all products with filters
 // @route   GET /api/products
 // @access  Public
 exports.getAllProducts = async (req, res, next) => {
   try {
-    const { 
-      search, 
-      category, 
-      minPrice, 
-      maxPrice, 
-      sort, 
-      page = 1, 
+    const {
+      search,
+      category,
+      minPrice,
+      maxPrice,
+      sort,
+      page = 1,
       limit = 12,
-      featured
+      featured,
+      sizes,
+      colors,
     } = req.query;
 
     // Build query
@@ -22,14 +25,63 @@ exports.getAllProducts = async (req, res, next) => {
 
     if (search) {
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $in: [new RegExp(search, 'i')] } }
+        { name: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+        { tags: { $in: [new RegExp(search, "i")] } },
       ];
     }
 
     if (category) {
-      query.category = category;
+      // Check if category is a valid ObjectId
+      const mongoose = require("mongoose");
+      if (mongoose.Types.ObjectId.isValid(category)) {
+        // It's an ObjectId, use it directly
+        // But also check if this category has children
+        const childCategories = await Category.find({ parent: category });
+        if (childCategories.length > 0) {
+          // Include parent and all child categories
+          query.category = {
+            $in: [category, ...childCategories.map(c => c._id)]
+          };
+        } else {
+          query.category = category;
+        }
+      } else {
+        // It's a name or slug, find the category first
+        const categoryDoc = await Category.findOne({
+          $or: [
+            { slug: category.toLowerCase() },
+            { name: { $regex: new RegExp(`^${category}$`, "i") } },
+          ],
+        });
+
+        if (categoryDoc) {
+          // Check if this category has children
+          const childCategories = await Category.find({ parent: categoryDoc._id });
+          if (childCategories.length > 0) {
+            // Include parent and all child categories
+            query.category = {
+              $in: [categoryDoc._id, ...childCategories.map(c => c._id)]
+            };
+          } else {
+            query.category = categoryDoc._id;
+          }
+        } else {
+          // Category not found, return empty results
+          return res.json({
+            success: true,
+            data: {
+              products: [],
+              pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                total: 0,
+                pages: 0,
+              },
+            },
+          });
+        }
+      }
     }
 
     if (minPrice || maxPrice) {
@@ -38,23 +90,39 @@ exports.getAllProducts = async (req, res, next) => {
       if (maxPrice) query.price.$lte = Number(maxPrice);
     }
 
-    if (featured === 'true') {
+    // Filter by sizes
+    if (sizes) {
+      const sizeArray = Array.isArray(sizes) ? sizes : [sizes];
+      query.sizes = { $in: sizeArray };
+    }
+
+    // Filter by colors
+    if (colors) {
+      const colorArray = Array.isArray(colors) ? colors : [colors];
+      query.color = { $in: colorArray };
+    }
+
+    if (featured === "true") {
       query.featured = true;
     }
 
     // Sorting
     let sortOptions = {};
-    if (sort === 'price-asc') sortOptions.price = 1;
-    else if (sort === 'price-desc') sortOptions.price = -1;
-    else if (sort === 'newest') sortOptions.createdAt = -1;
-    else if (sort === 'popular') sortOptions.sold = -1;
+    if (sort === "price-asc") sortOptions.price = 1;
+    else if (sort === "price-desc") sortOptions.price = -1;
+    else if (sort === "newest") sortOptions.createdAt = -1;
+    else if (sort === "popular") sortOptions.sold = -1;
     else sortOptions.createdAt = -1;
 
     // Pagination
     const skip = (page - 1) * limit;
 
     const products = await Product.find(query)
-      .populate('category', 'name slug')
+      .populate({
+        path: "category",
+        select: "name slug",
+        // populate: { path: "parent", select: "name slug" },
+      })
       .sort(sortOptions)
       .limit(parseInt(limit))
       .skip(skip);
@@ -69,9 +137,9 @@ exports.getAllProducts = async (req, res, next) => {
           page: parseInt(page),
           limit: parseInt(limit),
           total,
-          pages: Math.ceil(total / limit)
-        }
-      }
+          pages: Math.ceil(total / limit),
+        },
+      },
     });
   } catch (error) {
     next(error);
@@ -84,16 +152,20 @@ exports.getAllProducts = async (req, res, next) => {
 exports.getProduct = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id)
-      .populate('category', 'name slug')
       .populate({
-        path: 'reviews',
-        populate: { path: 'user', select: 'firstName lastName avatar' }
+        path: "category",
+        select: "name slug parent",
+        populate: { path: "parent", select: "name slug" },
+      })
+      .populate({
+        path: "reviews",
+        populate: { path: "user", select: "firstName lastName avatar" },
       });
 
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Product not found'
+        message: "Product not found",
       });
     }
 
@@ -103,7 +175,7 @@ exports.getProduct = async (req, res, next) => {
 
     res.json({
       success: true,
-      data: { product }
+      data: product,
     });
   } catch (error) {
     next(error);
@@ -118,22 +190,25 @@ exports.createProduct = async (req, res, next) => {
     const productData = req.body;
 
     // Parse JSON fields if they are strings
-    if (typeof productData.sizes === 'string') {
+    if (typeof productData.sizes === "string") {
       productData.sizes = JSON.parse(productData.sizes);
     }
-    if (typeof productData.colors === 'string') {
+    if (typeof productData.colors === "string") {
       productData.colors = JSON.parse(productData.colors);
     }
-    if (typeof productData.tags === 'string') {
+    if (typeof productData.tags === "string") {
       productData.tags = JSON.parse(productData.tags);
+    }
+    if (typeof productData.variants === "string") {
+      productData.variants = JSON.parse(productData.variants);
     }
 
     // Add Cloudinary image URLs
     if (req.files && req.files.length > 0) {
-      productData.images = req.files.map(file => ({
+      productData.images = req.files.map((file) => ({
         url: file.path, // Cloudinary URL
         publicId: file.filename, // Cloudinary public ID for deletion
-        alt: productData.name
+        alt: productData.name,
       }));
     }
 
@@ -141,8 +216,8 @@ exports.createProduct = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: 'Product created successfully',
-      data: { product }
+      message: "Product created successfully",
+      data: { product },
     });
   } catch (error) {
     next(error);
@@ -157,29 +232,33 @@ exports.updateProduct = async (req, res, next) => {
     const productData = req.body;
 
     // Parse JSON fields if they are strings
-    if (typeof productData.sizes === 'string') {
+    if (typeof productData.sizes === "string") {
       productData.sizes = JSON.parse(productData.sizes);
     }
-    if (typeof productData.colors === 'string') {
+    if (typeof productData.colors === "string") {
       productData.colors = JSON.parse(productData.colors);
     }
-    if (typeof productData.tags === 'string') {
+    if (typeof productData.tags === "string") {
       productData.tags = JSON.parse(productData.tags);
+    }
+    if (typeof productData.variants === "string") {
+      productData.variants = JSON.parse(productData.variants);
     }
 
     // If new images are uploaded, add them
     if (req.files && req.files.length > 0) {
-      const newImages = req.files.map(file => ({
+      const newImages = req.files.map((file) => ({
         url: file.path,
         publicId: file.filename,
-        alt: productData.name || 'Product image'
+        alt: productData.name || "Product image",
       }));
-      
+
       // If product data has existing images, append new ones
       if (productData.images) {
-        const existingImages = typeof productData.images === 'string' 
-          ? JSON.parse(productData.images) 
-          : productData.images;
+        const existingImages =
+          typeof productData.images === "string"
+            ? JSON.parse(productData.images)
+            : productData.images;
         productData.images = [...existingImages, ...newImages];
       } else {
         productData.images = newImages;
@@ -195,14 +274,14 @@ exports.updateProduct = async (req, res, next) => {
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Product not found'
+        message: "Product not found",
       });
     }
 
     res.json({
       success: true,
-      message: 'Product updated successfully',
-      data: { product }
+      message: "Product updated successfully",
+      data: { product },
     });
   } catch (error) {
     next(error);
@@ -219,7 +298,7 @@ exports.deleteProduct = async (req, res, next) => {
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Product not found'
+        message: "Product not found",
       });
     }
 
@@ -236,7 +315,7 @@ exports.deleteProduct = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: 'Product deleted successfully'
+      message: "Product deleted successfully",
     });
   } catch (error) {
     next(error);
@@ -255,17 +334,19 @@ exports.deleteProductImage = async (req, res, next) => {
     if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'Product not found'
+        message: "Product not found",
       });
     }
 
     // Find and remove the image from product
-    const imageIndex = product.images.findIndex(img => img.publicId === publicId);
+    const imageIndex = product.images.findIndex(
+      (img) => img.publicId === publicId
+    );
 
     if (imageIndex === -1) {
       return res.status(404).json({
         success: false,
-        message: 'Image not found'
+        message: "Image not found",
       });
     }
 
@@ -278,8 +359,8 @@ exports.deleteProductImage = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: 'Image deleted successfully',
-      data: { product }
+      message: "Image deleted successfully",
+      data: { product },
     });
   } catch (error) {
     next(error);

@@ -25,7 +25,7 @@ export interface Cart {
   user: string;
   items: CartItem[];
   totalItems: number;
-  totalPrice: number;
+  totalAmount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -46,7 +46,7 @@ export const cartApi = baseApi.injectEndpoints({
       { productId: string; quantity: number; size?: string; color?: string }
     >({
       query: (data) => ({
-        url: '/cart',
+        url: '/cart/items',
         method: 'POST',
         body: data,
       }),
@@ -60,7 +60,7 @@ export const cartApi = baseApi.injectEndpoints({
       { itemId: string; quantity: number }
     >({
       query: ({ itemId, quantity }) => ({
-        url: `/cart/${itemId}`,
+        url: `/cart/items/${itemId}`,
         method: 'PUT',
         body: { quantity },
       }),
@@ -71,7 +71,7 @@ export const cartApi = baseApi.injectEndpoints({
     // Remove item from cart
     removeFromCart: builder.mutation<Cart, string>({
       query: (itemId) => ({
-        url: `/cart/${itemId}`,
+        url: `/cart/items/${itemId}`,
         method: 'DELETE',
       }),
       invalidatesTags: ['Cart'],

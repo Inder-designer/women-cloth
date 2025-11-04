@@ -1,13 +1,25 @@
+export interface ProductVariant {
+  size: string;
+  stock: number;
+  sku?: string;
+  price?: number;
+  images?: string[];
+}
+
 export interface Product {
   id: string;
   name: string;
   price: number;
   originalPrice?: number;
   image: string;
-  category: string;
+  category: {
+    name: string;
+    slug: string;
+  };
   description: string;
   sizes: string[];
-  colors: string[];
+  color?: string;
+  variants?: ProductVariant[];
   inStock: boolean;
 }
 
@@ -15,7 +27,6 @@ export interface CartItem {
   product: Product;
   quantity: number;
   size: string;
-  color: string;
 }
 
 export interface WishlistItem {

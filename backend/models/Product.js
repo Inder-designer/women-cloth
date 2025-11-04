@@ -34,16 +34,36 @@ const productSchema = new mongoose.Schema({
     publicId: String, // Cloudinary public ID for deletion
     alt: String
   }],
+  // Legacy fields - kept for backward compatibility
   sizes: [{
     type: String,
     enum: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'One Size']
   }],
-  colors: [String],
+  color: {
+    type: String,
+    default: 'Default'
+  },
   stock: {
     type: Number,
     default: 0,
     min: 0
   },
+  // New variant system - size-based only
+  variants: [{
+    size: {
+      type: String,
+      enum: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'One Size'],
+      required: true
+    },
+    stock: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    sku: String, // Stock Keeping Unit - unique identifier for this variant
+    price: Number, // Optional: if this variant has different price
+    images: [String] // Optional: specific images for this variant
+  }],
   inStock: {
     type: Boolean,
     default: true
@@ -76,8 +96,39 @@ productSchema.pre('save', function(next) {
   if (this.isModified('name')) {
     this.slug = slugify(this.name, { lower: true, strict: true });
   }
+  
+  // Update total stock from variants if variants exist
+  if (this.variants && this.variants.length > 0) {
+    this.stock = this.variants.reduce((total, variant) => total + (variant.stock || 0), 0);
+    this.inStock = this.stock > 0;
+    
+    // Update legacy sizes array from variants
+    const uniqueSizes = [...new Set(this.variants.map(v => v.size))];
+    this.sizes = uniqueSizes;
+  }
+  
   next();
 });
+
+// Method to get available variants (in stock)
+productSchema.methods.getAvailableVariants = function() {
+  return this.variants.filter(variant => variant.stock > 0);
+};
+
+// Method to find specific variant by size only
+productSchema.methods.findVariant = function(size) {
+  return this.variants.find(v => v.size === size);
+};
+
+// Method to update variant stock by size only
+productSchema.methods.updateVariantStock = function(size, quantity) {
+  const variant = this.findVariant(size);
+  if (variant) {
+    variant.stock = Math.max(0, variant.stock - quantity);
+    return true;
+  }
+  return false;
+};
 
 // Virtual for discount percentage
 productSchema.virtual('discountPercentage').get(function() {

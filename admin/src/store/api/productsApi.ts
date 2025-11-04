@@ -74,9 +74,10 @@ export const productsApi = baseApi.injectEndpoints({
             ]
           : [{ type: 'Products', id: 'LIST' }],
     }),
-    getProductById: builder.query<ProductResponse, string>({
+    getProductById: builder.query<{ product: Product }, string>({
       query: (id) => `/products/${id}`,
       providesTags: (result, error, id) => [{ type: 'Product', id }],
+      transformResponse: (response: ProductResponse) => response.data,
     }),
     createProduct: builder.mutation<ProductResponse, FormData>({
       query: (formData) => ({

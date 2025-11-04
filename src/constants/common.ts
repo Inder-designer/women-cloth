@@ -1,0 +1,23 @@
+  export const sizes = ["XS", "S", "M", "L", "XL", "XXL"];
+  export const colors = [
+        { name: 'Black', value: '#000000' },
+        { name: 'White', value: '#FFFFFF' },
+        { name: 'Red', value: '#DC2626' },
+        { name: 'Blue', value: '#2563EB' },
+        { name: 'Navy', value: '#1E3A8A' },
+        { name: 'Green', value: '#16A34A' },
+        { name: 'Yellow', value: '#FCD34D' },
+        { name: 'Orange', value: '#F97316' },
+        { name: 'Pink', value: '#EC4899' },
+        { name: 'Purple', value: '#9333EA' },
+        { name: 'Brown', value: '#92400E' },
+        { name: 'Beige', value: '#D4A574' },
+        { name: 'Gray', value: '#6B7280' },
+        { name: 'Maroon', value: '#7F1D1D' },
+        { name: 'Teal', value: '#0D9488' },
+        { name: 'Gold', value: '#CA8A04' },
+        { name: 'Silver', value: '#9CA3AF' },
+        { name: 'Coral', value: '#FB7185' },
+        { name: 'Mint', value: '#6EE7B7' },
+        { name: 'Lavender', value: '#C084FC' },
+    ];

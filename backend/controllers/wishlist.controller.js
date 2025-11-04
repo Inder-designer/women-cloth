@@ -8,7 +8,7 @@ exports.getWishlist = async (req, res, next) => {
   try {
     let wishlist = await Wishlist.findOne({ user: req.user.id }).populate(
       "products",
-      "name slug price originalPrice images rating inStock"
+      "name slug price originalPrice images rating inStock sizes colors"
     );
 
     if (!wishlist) {

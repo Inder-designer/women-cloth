@@ -1,20 +1,51 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useState, useMemo } from 'react';
-import { products } from '@/data/products';
-import { useCart } from '@/contexts/CartContext';
-import { useWishlist } from '@/contexts/WishlistContext';
 import Link from 'next/link';
 import ProductCard from '@/components/ProductCard';
+import { useGetProductByIdQuery, useGetRelatedProductsQuery } from '@/store/api/productsApi';
+import { useAddToCartMutation } from '@/store/api/cartApi';
+import { useAddToWishlistMutation, useRemoveFromWishlistMutation, useGetWishlistQuery } from '@/store/api/wishlistApi';
+import { useAuthContext } from '@/contexts/AuthContext';
+import { transformProduct, transformProducts } from '@/lib/productHelpers';
 
 export default function ProductDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const productId = params.id as string;
-  const product = products.find((p) => p.id === productId);
+  const { isAuthenticated } = useAuthContext();
 
-  const { addToCart } = useCart();
-  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
+  // Fetch product from API
+  const { data: productData, isLoading: isLoadingProduct, error: productError } = useGetProductByIdQuery(productId);
+  console.log(productData);
+
+  const product = productData ? transformProduct(productData) : null;
+
+  // Fetch related products
+  const categoryId = typeof productData?.category.slug === 'string'
+    ? productData.category.slug
+    : productData?.category?._id || '';
+
+  const { data: relatedData, isLoading: isLoadingRelated } = useGetRelatedProductsQuery(
+    {
+      categoryId,
+      productId: productId,
+      limit: 4,
+    },
+    {
+      skip: !productData || !categoryId,
+    }
+  );
+  const relatedProducts = relatedData ? transformProducts(relatedData) : [];
+
+  // API Mutations
+  const [addToCart, { isLoading: isAddingToCart }] = useAddToCartMutation();
+  const [addToWishlist, { isLoading: isAddingToWishlist }] = useAddToWishlistMutation();
+  const [removeFromWishlist, { isLoading: isRemovingFromWishlist }] = useRemoveFromWishlistMutation();
+  const { data: wishlist } = useGetWishlistQuery(undefined, {
+    skip: !isAuthenticated,
+  });
 
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
@@ -22,15 +53,36 @@ export default function ProductDetailPage() {
   const [activeTab, setActiveTab] = useState<'description' | 'details' | 'reviews'>('description');
   const [showNotification, setShowNotification] = useState(false);
 
-  // Related products (same category, excluding current product)
-  const relatedProducts = useMemo(() => {
-    if (!product) return [];
-    return products
-      .filter((p) => p.category === product.category && p.id !== product.id)
-      .slice(0, 4);
-  }, [product]);
+  // Check if product is in wishlist
+  const productIdToCheck = (productData as any)?._id || productId;
+  const isInWishlist = wishlist?.products?.some((item: any) => {
+    const itemId = item._id || item.id;
+    return itemId === productIdToCheck;
+  }) || false;
 
-  if (!product) {
+  // Loading state
+  if (isLoadingProduct) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="container mx-auto px-4">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-1/4 mb-8"></div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="aspect-square bg-gray-200 rounded-lg"></div>
+              <div className="space-y-4">
+                <div className="h-8 bg-gray-200 rounded w-3/4"></div>
+                <div className="h-12 bg-gray-200 rounded w-1/2"></div>
+                <div className="h-24 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error or not found
+  if (productError || !product) {
     return (
       <div className="min-h-screen bg-gray-50 py-12">
         <div className="container mx-auto px-4 text-center">
@@ -50,34 +102,59 @@ export default function ProductDetailPage() {
     );
   }
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
+    // Check if user is authenticated
+    if (!isAuthenticated) {
+      router.push(`/auth/login?returnUrl=${encodeURIComponent(`/product/${productId}`)}`);
+      return;
+    }
+
     if (!selectedSize || !selectedColor) {
       alert('Please select size and color');
       return;
     }
 
-    addToCart({
-      product,
-      quantity,
-      size: selectedSize,
-      color: selectedColor,
-    });
+    try {
+      await addToCart({
+        productId: productIdToCheck,
+        quantity,
+        size: selectedSize,
+        color: selectedColor,
+      }).unwrap();
 
-    setShowNotification(true);
-    setTimeout(() => setShowNotification(false), 3000);
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 3000);
+    } catch (err) {
+      console.error('Failed to add to cart:', err);
+      alert('Failed to add to cart. Please try again.');
+    }
   };
 
-  const toggleWishlist = () => {
-    if (isInWishlist(product.id)) {
-      removeFromWishlist(product.id);
-    } else {
-      addToWishlist(product);
+  const toggleWishlist = async () => {
+    // Check if user is authenticated
+    if (!isAuthenticated) {
+      router.push(`/auth/login?returnUrl=${encodeURIComponent(`/product/${productId}`)}`);
+      return;
+    }
+
+    try {
+      if (isInWishlist) {
+        await removeFromWishlist(productIdToCheck).unwrap();
+      } else {
+        await addToWishlist({ productId: productIdToCheck }).unwrap();
+      }
+    } catch (err) {
+      console.error('Failed to update wishlist:', err);
+      alert('Failed to update wishlist. Please try again.');
     }
   };
 
   const discount = product.originalPrice
     ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
     : 0;
+
+  console.log(product);
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -88,9 +165,17 @@ export default function ProductDetailPage() {
             <Link href="/" className="hover:text-[#a90202] transition">Home</Link>
             <span>/</span>
             <Link href="/shop" className="hover:text-[#a90202] transition">Shop</Link>
+            {product.parentCategory.name && (
+              <>
+                <span>/</span>
+                <Link href={`/shop?category=${product.parentCategory.slug}`} className="hover:text-[#a90202] transition capitalize">
+                  {product.parentCategory.name}
+                </Link>
+              </>
+            )}
             <span>/</span>
-            <Link href={`/shop?category=${product.category.toLowerCase()}`} className="hover:text-[#a90202] transition capitalize">
-              {product.category}
+            <Link href={`/shop?category=${product.category.slug}`} className="hover:text-[#a90202] transition capitalize">
+              {product.category.name}
             </Link>
             <span>/</span>
             <span className="text-gray-900 font-medium">{product.name}</span>
@@ -137,10 +222,10 @@ export default function ProductDetailPage() {
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="mb-4">
               <Link
-                href={`/shop?category=${product.category.toLowerCase()}`}
+                href={`/shop?category=${product.category.slug}`}
                 className="text-xs text-[#a90202] font-semibold uppercase tracking-wider hover:underline"
               >
-                {product.category}
+                {product.category.name}
               </Link>
               <h1 className="text-2xl font-bold text-gray-900 mt-2 font-playfair">
                 {product.name}
@@ -188,11 +273,10 @@ export default function ProductDetailPage() {
                   <button
                     key={size}
                     onClick={() => setSelectedSize(size)}
-                    className={`px-3 py-2 border rounded-md text-sm font-semibold transition ${
-                      selectedSize === size
-                        ? 'bg-[#a90202] text-white border-[#a90202]'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-[#a90202]'
-                    }`}
+                    className={`px-3 py-2 border rounded-md text-sm font-semibold transition ${selectedSize === size
+                      ? 'bg-[#a90202] text-white border-[#a90202]'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-[#a90202]'
+                      }`}
                   >
                     {size}
                   </button>
@@ -210,11 +294,10 @@ export default function ProductDetailPage() {
                   <button
                     key={color}
                     onClick={() => setSelectedColor(color)}
-                    className={`px-4 py-2 border rounded-md text-sm font-semibold transition ${
-                      selectedColor === color
-                        ? 'bg-[#a90202] text-white border-[#a90202]'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-[#a90202]'
-                    }`}
+                    className={`px-4 py-2 border rounded-md text-sm font-semibold transition ${selectedColor === color
+                      ? 'bg-[#a90202] text-white border-[#a90202]'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-[#a90202]'
+                      }`}
                   >
                     {color}
                   </button>
@@ -261,23 +344,35 @@ export default function ProductDetailPage() {
             <div className="flex gap-3 mb-4">
               <button
                 onClick={handleAddToCart}
-                disabled={!product.inStock}
+                disabled={!product.inStock || isAddingToCart}
                 className="flex-1 bg-[#a90202] text-white py-3 rounded-md font-semibold hover:bg-[#8a0101] transition disabled:bg-gray-300 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                {product.inStock ? 'Add to Cart' : 'Out of Stock'}
+                {isAddingToCart ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Adding...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    {product.inStock ? 'Add to Cart' : 'Out of Stock'}
+                  </>
+                )}
               </button>
               <button
                 onClick={toggleWishlist}
-                className={`px-4 py-3 border-2 rounded-md font-semibold transition ${
-                  isInWishlist(product.id)
-                    ? 'bg-[#a90202] border-[#a90202] text-white'
-                    : 'border-gray-300 text-gray-700 hover:border-[#a90202] hover:text-[#a90202]'
-                }`}
+                disabled={isAddingToWishlist || isRemovingFromWishlist}
+                className={`px-4 py-3 border-2 rounded-md font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed ${isInWishlist
+                  ? 'bg-[#a90202] border-[#a90202] text-white'
+                  : 'border-gray-300 text-gray-700 hover:border-[#a90202] hover:text-[#a90202]'
+                  }`}
               >
-                <svg className="w-5 h-5" fill={isInWishlist(product.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill={isInWishlist ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                 </svg>
               </button>
@@ -313,31 +408,28 @@ export default function ProductDetailPage() {
             <div className="flex">
               <button
                 onClick={() => setActiveTab('description')}
-                className={`px-6 py-3 text-sm font-semibold transition border-b-2 ${
-                  activeTab === 'description'
-                    ? 'border-[#a90202] text-[#a90202]'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
-                }`}
+                className={`px-6 py-3 text-sm font-semibold transition border-b-2 ${activeTab === 'description'
+                  ? 'border-[#a90202] text-[#a90202]'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+                  }`}
               >
                 Description
               </button>
               <button
                 onClick={() => setActiveTab('details')}
-                className={`px-6 py-3 text-sm font-semibold transition border-b-2 ${
-                  activeTab === 'details'
-                    ? 'border-[#a90202] text-[#a90202]'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
-                }`}
+                className={`px-6 py-3 text-sm font-semibold transition border-b-2 ${activeTab === 'details'
+                  ? 'border-[#a90202] text-[#a90202]'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+                  }`}
               >
                 Product Details
               </button>
               <button
                 onClick={() => setActiveTab('reviews')}
-                className={`px-6 py-3 text-sm font-semibold transition border-b-2 ${
-                  activeTab === 'reviews'
-                    ? 'border-[#a90202] text-[#a90202]'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
-                }`}
+                className={`px-6 py-3 text-sm font-semibold transition border-b-2 ${activeTab === 'reviews'
+                  ? 'border-[#a90202] text-[#a90202]'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+                  }`}
               >
                 Reviews (4.8)
               </button>
@@ -351,7 +443,7 @@ export default function ProductDetailPage() {
                   {product.description}
                 </p>
                 <p className="text-gray-600 leading-relaxed mt-4">
-                  This premium quality product is crafted with attention to detail and designed to provide both style and comfort. 
+                  This premium quality product is crafted with attention to detail and designed to provide both style and comfort.
                   Perfect for various occasions, it combines modern aesthetics with practical functionality.
                 </p>
                 <ul className="list-disc list-inside text-gray-600 mt-4 space-y-1">
@@ -371,7 +463,7 @@ export default function ProductDetailPage() {
                   <dl className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <dt className="text-gray-600">Category:</dt>
-                      <dd className="font-medium text-gray-900">{product.category}</dd>
+                      <dd className="font-medium text-gray-900">{product.category.name}</dd>
                     </div>
                     <div className="flex justify-between">
                       <dt className="text-gray-600">SKU:</dt>
@@ -473,11 +565,24 @@ export default function ProductDetailPage() {
         </div>
 
         {/* Related Products */}
-        {relatedProducts.length > 0 && (
+        {isLoadingRelated ? (
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 font-playfair mb-6">You May Also Like</h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="bg-white rounded-lg shadow-md p-4 animate-pulse">
+                  <div className="aspect-square bg-gray-200 rounded-lg mb-4"></div>
+                  <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : relatedProducts.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900 font-playfair">You May Also Like</h2>
-              <Link href="/shop" className="text-sm text-[#a90202] font-semibold hover:underline">
+              <Link href={`/shop?category=${product.category.name}`} className="text-sm text-[#a90202] font-semibold hover:underline">
                 View All →
               </Link>
             </div>

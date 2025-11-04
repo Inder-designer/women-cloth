@@ -29,7 +29,7 @@ export default function Header() {
   });
   const [logout] = useLogoutMutation();
 
-  const cartItemsCount = cart?.totalItems || 0;
+  const cartItemsCount = cart?.items.length || 0;
   const wishlistItemsCount = wishlist?.products?.length || 0;
 
   // Handle search

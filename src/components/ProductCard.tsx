@@ -24,11 +24,39 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
   const { data: wishlist } = useGetWishlistQuery(undefined, {
     skip: !isAuthenticated, // Only fetch if authenticated
   });
-  console.log(wishlist);
-  
+
+  // Variant selection state
+  const [selectedSize, setSelectedSize] = useState<string>(product.sizes?.[0] || '');
+  const [showVariantSelector, setShowVariantSelector] = useState<boolean>(false);
+
+  // Get available sizes (if variants exist)
+  const getAvailableSizes = () => {
+    if (!product.variants || product.variants.length === 0) {
+      return product.sizes || [];
+    }
+    const availableSizes = product.variants
+      .filter(v => v.stock > 0)
+      .map(v => v.size);
+    return [...new Set(availableSizes)];
+  };
+
+  // Get current variant stock
+  const getCurrentVariantStock = () => {
+    if (!product.variants || product.variants.length === 0) {
+      return product.inStock;
+    }
+    const variant = product.variants.find(v => v.size === selectedSize);
+    return variant ? variant.stock > 0 : false;
+  };
 
   // Check if product is in wishlist
-  const inWishlist = wishlist?.products?.some((item: any) => item.product._id === product._id) || false;
+  // Wishlist products are backend format with _id, product might be frontend format with id
+  const productId = (product as any)._id || product.id;
+  const inWishlist = wishlist?.products?.some((item: any) => {
+    // item is a populated Product from backend with _id
+    const itemId = item._id || item.id;
+    return itemId === productId;
+  }) || false;
 
   const handleWishlistToggle = async () => {
     // Check if user is authenticated
@@ -41,9 +69,9 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
 
     try {
       if (inWishlist) {
-        await removeFromWishlist(product.id).unwrap();
+        await removeFromWishlist(productId).unwrap();
       } else {
-        await addToWishlist({ productId: product.id }).unwrap();
+        await addToWishlist({ productId }).unwrap();
       }
     } catch (err) {
       console.error('Failed to update wishlist:', err);
@@ -59,18 +87,37 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
       return;
     }
 
+    // Check if variant is available
+    if (!getCurrentVariantStock()) {
+      alert('This variant is currently out of stock. Please select another size.');
+      return;
+    }
+
     try {
       await addToCart({
-        productId: product.id,
+        productId,
         quantity: 1,
-        size: product.sizes?.[0],
-        color: product.colors?.[0],
+        size: selectedSize,
       }).unwrap();
-      // Optional: Show success message
+      // Hide variant selector after adding to cart
+      setShowVariantSelector(false);
     } catch (err) {
       console.error('Failed to add to cart:', err);
     }
   };
+
+  const handleQuickAdd = () => {
+    // Always show variant selector if product has multiple sizes
+    if (product.sizes && product.sizes.length > 1) {
+      setShowVariantSelector(true);
+    } else {
+      // If only one size or no sizes, add directly
+      handleAddToCart();
+    }
+  };
+
+  const availableSizes = getAvailableSizes();
+  const isVariantInStock = getCurrentVariantStock();
 
   // List View Layout
   if (viewMode === 'list') {
@@ -95,7 +142,7 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
           <div className="flex-1 p-6 flex flex-col justify-between">
             <div>
               <Link href={`/product/${product.id}`}>
-                <p className="text-sm text-gray-500 mb-1 uppercase tracking-wide">{product.category}</p>
+                <p className="text-sm text-gray-500 mb-1 uppercase tracking-wide">{product.category.name}</p>
                 <h3 className="text-2xl font-bold text-gray-900 mb-3 hover:text-[#D32F2F] transition font-playfair">
                   {product.name}
                 </h3>
@@ -112,18 +159,17 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
                         {size}
                       </span>
                     ))}
+                    {product.sizes.length > 4 && (
+                      <span className="px-2 py-1 text-xs text-gray-500">+{product.sizes.length - 4} more</span>
+                    )}
                   </div>
                 </div>
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Colors</p>
-                  <div className="flex gap-2">
-                    {product.colors.slice(0, 4).map((color) => (
-                      <span key={color} className="px-2 py-1 bg-gray-100 rounded text-xs">
-                        {color}
-                      </span>
-                    ))}
+                {product.color && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Color</p>
+                    <p className="text-sm font-medium text-gray-800">{product.color}</p>
                   </div>
-                </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2 mb-4">
@@ -133,6 +179,96 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
                   {product.inStock ? 'In Stock' : 'Out of Stock'}
                 </span>
               </div>
+              
+              {/* Variant Selector Modal for List View */}
+              {showVariantSelector && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowVariantSelector(false)}>
+                  <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-bold text-gray-900">Select Size</h3>
+                      <button
+                        onClick={() => setShowVariantSelector(false)}
+                        className="text-gray-400 hover:text-gray-600 transition"
+                      >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Product Info */}
+                    <div className="flex gap-4 mb-4 pb-4 border-b">
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        className="w-20 h-20 object-cover rounded"
+                      />
+                      <div>
+                        <h4 className="font-semibold text-gray-900 mb-1">{product.name}</h4>
+                        <p className="text-sm text-gray-500">{product.category.name}</p>
+                        <p className="text-lg font-bold text-[#D32F2F] mt-1">${product.price}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="mb-4">
+                      <label className="text-sm font-semibold text-gray-700 mb-3 block">Choose Size:</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {product.sizes.map((size) => {
+                          const isAvailable = availableSizes.includes(size);
+                          return (
+                            <button
+                              key={size}
+                              onClick={() => isAvailable && setSelectedSize(size)}
+                              disabled={!isAvailable}
+                              className={`px-4 py-3 border-2 rounded-lg text-sm font-semibold transition ${
+                                selectedSize === size
+                                  ? 'border-[#D32F2F] bg-[#D32F2F] text-white shadow-md'
+                                  : isAvailable
+                                  ? 'border-gray-300 hover:border-[#D32F2F] hover:shadow-sm'
+                                  : 'border-gray-200 text-gray-400 cursor-not-allowed line-through bg-gray-50'
+                              }`}
+                            >
+                              {size}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {!isVariantInStock && selectedSize && (
+                      <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <p className="text-sm text-red-700 font-medium">⚠️ This size is currently out of stock</p>
+                      </div>
+                    )}
+
+                    {isVariantInStock && selectedSize && (
+                      <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-sm text-green-700 font-medium">✓ In Stock</p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleAddToCart}
+                      disabled={isAddingToCart || !selectedSize || !isVariantInStock}
+                      className="w-full bg-[#D32F2F] text-white py-3 rounded-lg hover:bg-[#B71C1C] transition font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {isAddingToCart ? (
+                        <>
+                          <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                          Adding to Cart...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                          Add to Cart
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between mt-4">
@@ -172,7 +308,7 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
                   )}
                 </button>
                 <button
-                  onClick={handleAddToCart}
+                  onClick={handleQuickAdd}
                   disabled={isAddingToCart || !product.inStock}
                   className="px-8 py-3 bg-[#D32F2F] text-white rounded-md hover:bg-[#B71C1C] transition font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -244,11 +380,19 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
 
       <div className="p-3">
         <Link href={`/product/${product.id}`}>
-          <p className="text-xs text-gray-500 mb-1 capitalize">{product.category}</p>
+          <p className="text-xs text-gray-500 mb-1 capitalize">{product.category.name}</p>
           <h3 className="text-sm font-semibold text-gray-900 mb-2 hover:text-[#D32F2F] transition line-clamp-2">
             {product.name}
           </h3>
         </Link>
+        
+        {/* Color Display */}
+        {product.color && (
+          <div className="mb-2">
+            <span className="text-xs text-gray-600">Color: </span>
+            <span className="text-xs font-medium text-gray-800">{product.color}</span>
+          </div>
+        )}
         
         <div className="flex items-center justify-between mb-2">
           <div>
@@ -259,10 +403,103 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
               </span>
             )}
           </div>
+          <span className={`text-xs font-semibold ${product.inStock ? 'text-green-600' : 'text-red-600'}`}>
+            {product.inStock ? 'In Stock' : 'Out of Stock'}
+          </span>
         </div>
 
+        {/* Variant Selector Modal for Grid View */}
+        {showVariantSelector && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowVariantSelector(false)}>
+            <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-gray-900">Select Size</h3>
+                <button
+                  onClick={() => setShowVariantSelector(false)}
+                  className="text-gray-400 hover:text-gray-600 transition"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Product Info */}
+              <div className="flex gap-4 mb-4 pb-4 border-b">
+                <img
+                  src={product.image}
+                  alt={product.name}
+                  className="w-20 h-20 object-cover rounded"
+                />
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-1">{product.name}</h4>
+                  <p className="text-sm text-gray-500">{product.category.name}</p>
+                  <p className="text-lg font-bold text-[#D32F2F] mt-1">${product.price}</p>
+                </div>
+              </div>
+              
+              <div className="mb-4">
+                <label className="text-sm font-semibold text-gray-700 mb-3 block">Choose Size:</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {product.sizes.map((size) => {
+                    const isAvailable = availableSizes.includes(size);
+                    return (
+                      <button
+                        key={size}
+                        onClick={() => isAvailable && setSelectedSize(size)}
+                        disabled={!isAvailable}
+                        className={`px-4 py-3 border-2 rounded-lg text-sm font-semibold transition ${
+                          selectedSize === size
+                            ? 'border-[#D32F2F] bg-[#D32F2F] text-white shadow-md'
+                            : isAvailable
+                            ? 'border-gray-300 hover:border-[#D32F2F] hover:shadow-sm'
+                            : 'border-gray-200 text-gray-400 cursor-not-allowed line-through bg-gray-50'
+                        }`}
+                      >
+                        {size}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {!isVariantInStock && selectedSize && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-700 font-medium">⚠️ This size is currently out of stock</p>
+                </div>
+              )}
+
+              {isVariantInStock && selectedSize && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-sm text-green-700 font-medium">✓ In Stock</p>
+                </div>
+              )}
+
+              <button
+                onClick={handleAddToCart}
+                disabled={isAddingToCart || !selectedSize || !isVariantInStock}
+                className="w-full bg-[#D32F2F] text-white py-3 rounded-lg hover:bg-[#B71C1C] transition font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isAddingToCart ? (
+                  <>
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                    Adding to Cart...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    Add to Cart
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
         <button
-          onClick={handleAddToCart}
+          onClick={handleQuickAdd}
           disabled={isAddingToCart || !product.inStock}
           className="w-full bg-[#D32F2F] text-white py-2 rounded-md hover:bg-[#B71C1C] transition font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
@@ -272,7 +509,12 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
               Adding...
             </>
           ) : (
-            'Add to Cart'
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              Add to Cart
+            </>
           )}
         </button>
       </div>

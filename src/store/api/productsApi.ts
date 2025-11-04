@@ -12,6 +12,11 @@ export interface Product {
     _id: string;
     name: string;
     slug: string;
+    parent?: {
+      _id: string;
+      name: string;
+      slug: string;
+    };
   };
   images: {
     url: string;

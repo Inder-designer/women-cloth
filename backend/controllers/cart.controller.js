@@ -29,7 +29,7 @@ exports.getCart = async (req, res, next) => {
 // @access  Private
 exports.addToCart = async (req, res, next) => {
   try {
-    const { productId, quantity = 1, size, color } = req.body;
+    const { productId, quantity = 1, size } = req.body;
 
     // Check if product exists
     const product = await Product.findById(productId);
@@ -57,12 +57,11 @@ exports.addToCart = async (req, res, next) => {
       });
     }
 
-    // Check if product already in cart
+    // Check if product already in cart (by product and size only)
     const existingItem = cart.items.find(
       (item) =>
         item.product.toString() === productId &&
-        item.size === size &&
-        item.color === color
+        item.size === size
     );
 
     if (existingItem) {
@@ -72,7 +71,6 @@ exports.addToCart = async (req, res, next) => {
         product: productId,
         quantity,
         size,
-        color,
         price: product.price,
       });
     }

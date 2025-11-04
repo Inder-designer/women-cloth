@@ -14,7 +14,7 @@ interface Product {
   };
   images: Array<{ url: string; alt: string }>;
   sizes: string[];
-  colors: string[];
+  color?: string;
   stock: number;
   inStock: boolean;
   tags: string[];
