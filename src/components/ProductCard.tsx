@@ -29,6 +29,8 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
   const [selectedSize, setSelectedSize] = useState<string>(product.sizes?.[0] || '');
   const [showVariantSelector, setShowVariantSelector] = useState<boolean>(false);
 
+  console.log(product);
+
   // Get available sizes (if variants exist)
   const getAvailableSizes = () => {
     if (!product.variants || product.variants.length === 0) {
@@ -47,6 +49,23 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
     }
     const variant = product.variants.find(v => v.size === selectedSize);
     return variant ? variant.stock > 0 : false;
+  };
+
+  // Get display price (first variant price if variants exist, else product price)
+  const getDisplayPrice = () => {
+    if (product.variants && product.variants.length > 0) {
+      return product.variants[0].price || product.price;
+    }
+    return product.price;
+  };
+
+  // Get variant price by size
+  const getVariantPrice = (size: string) => {
+    if (!product.variants || product.variants.length === 0) {
+      return product.price;
+    }
+    const variant = product.variants.find(v => v.size === size);
+    return variant ? variant.price || product.price : product.price;
   };
 
   // Check if product is in wishlist
@@ -147,9 +166,9 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
                   {product.name}
                 </h3>
               </Link>
-              
+
               <p className="text-gray-600 mb-4 line-clamp-2">{product.description}</p>
-              
+
               <div className="flex flex-wrap gap-4 mb-4">
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Available Sizes</p>
@@ -173,13 +192,12 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
               </div>
 
               <div className="flex items-center gap-2 mb-4">
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                  product.inStock ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                }`}>
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${product.inStock ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  }`}>
                   {product.inStock ? 'In Stock' : 'Out of Stock'}
                 </span>
               </div>
-              
+
               {/* Variant Selector Modal for List View */}
               {showVariantSelector && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowVariantSelector(false)}>
@@ -206,29 +224,32 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
                       <div>
                         <h4 className="font-semibold text-gray-900 mb-1">{product.name}</h4>
                         <p className="text-sm text-gray-500">{product.category.name}</p>
-                        <p className="text-lg font-bold text-[#D32F2F] mt-1">${product.price}</p>
+                        <p className="text-lg font-bold text-[#D32F2F] mt-1">
+                          ${selectedSize ? getVariantPrice(selectedSize) : getDisplayPrice()}
+                        </p>
                       </div>
                     </div>
-                    
+
                     <div className="mb-4">
                       <label className="text-sm font-semibold text-gray-700 mb-3 block">Choose Size:</label>
                       <div className="grid grid-cols-3 gap-2">
                         {product.sizes.map((size) => {
                           const isAvailable = availableSizes.includes(size);
+                          const variantPrice = getVariantPrice(size);
                           return (
                             <button
                               key={size}
                               onClick={() => isAvailable && setSelectedSize(size)}
                               disabled={!isAvailable}
-                              className={`px-4 py-3 border-2 rounded-lg text-sm font-semibold transition ${
-                                selectedSize === size
+                              className={`px-4 py-3 border-2 rounded-lg text-sm font-semibold transition ${selectedSize === size
                                   ? 'border-[#D32F2F] bg-[#D32F2F] text-white shadow-md'
                                   : isAvailable
-                                  ? 'border-gray-300 hover:border-[#D32F2F] hover:shadow-sm'
-                                  : 'border-gray-200 text-gray-400 cursor-not-allowed line-through bg-gray-50'
-                              }`}
+                                    ? 'border-gray-300 hover:border-[#D32F2F] hover:shadow-sm'
+                                    : 'border-gray-200 text-gray-400 cursor-not-allowed line-through bg-gray-50'
+                                }`}
                             >
-                              {size}
+                              <div>{size}</div>
+                              <div className="text-xs mt-1">${variantPrice}</div>
                             </button>
                           );
                         })}
@@ -273,14 +294,14 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
 
             <div className="flex items-center justify-between mt-4">
               <div>
-                <span className="text-3xl font-bold text-[#D32F2F]">${product.price}</span>
+                <span className="text-3xl font-bold text-[#D32F2F]">${getDisplayPrice()}</span>
                 {product.originalPrice && (
                   <span className="text-lg text-gray-500 line-through ml-3">
                     ${product.originalPrice}
                   </span>
                 )}
               </div>
-              
+
               <div className="flex gap-3">
                 <button
                   onClick={handleWishlistToggle}
@@ -346,7 +367,7 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
           />
           {product.originalPrice && (
             <div className="absolute top-3 left-3 bg-[#D32F2F] text-white px-2 py-1 rounded-full text-xs font-semibold">
-              {Math.round((1 - product.price / product.originalPrice) * 100)}% OFF
+              {Math.round((1 - getDisplayPrice() / product.originalPrice) * 100)}% OFF
             </div>
           )}
         </div>
@@ -385,7 +406,7 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
             {product.name}
           </h3>
         </Link>
-        
+
         {/* Color Display */}
         {product.color && (
           <div className="mb-2">
@@ -393,10 +414,10 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
             <span className="text-xs font-medium text-gray-800">{product.color}</span>
           </div>
         )}
-        
+
         <div className="flex items-center justify-between mb-2">
           <div>
-            <span className="text-lg font-bold text-[#D32F2F]">${product.price}</span>
+            <span className="text-lg font-bold text-[#D32F2F]">${getDisplayPrice()}</span>
             {product.originalPrice && (
               <span className="text-xs text-gray-500 line-through ml-2">
                 ${product.originalPrice}
@@ -434,29 +455,32 @@ export default function ProductCard({ product, viewMode = 'grid' }: ProductCardP
                 <div>
                   <h4 className="font-semibold text-gray-900 mb-1">{product.name}</h4>
                   <p className="text-sm text-gray-500">{product.category.name}</p>
-                  <p className="text-lg font-bold text-[#D32F2F] mt-1">${product.price}</p>
+                  <p className="text-lg font-bold text-[#D32F2F] mt-1">
+                    ${selectedSize ? getVariantPrice(selectedSize) : getDisplayPrice()}
+                  </p>
                 </div>
               </div>
-              
+
               <div className="mb-4">
                 <label className="text-sm font-semibold text-gray-700 mb-3 block">Choose Size:</label>
                 <div className="grid grid-cols-3 gap-2">
-                  {product.sizes.map((size) => {
-                    const isAvailable = availableSizes.includes(size);
+                  {product.variants?.map((variant) => {
+                    const isAvailable = availableSizes.includes(variant.size);
+                    const variantPrice = getVariantPrice(variant.size);
                     return (
                       <button
-                        key={size}
-                        onClick={() => isAvailable && setSelectedSize(size)}
+                        key={variant.size}
+                        onClick={() => isAvailable && setSelectedSize(variant.size)}
                         disabled={!isAvailable}
-                        className={`px-4 py-3 border-2 rounded-lg text-sm font-semibold transition ${
-                          selectedSize === size
+                        className={`px-4 py-3 border-2 rounded-lg text-sm font-semibold transition ${selectedSize === variant.size
                             ? 'border-[#D32F2F] bg-[#D32F2F] text-white shadow-md'
                             : isAvailable
-                            ? 'border-gray-300 hover:border-[#D32F2F] hover:shadow-sm'
-                            : 'border-gray-200 text-gray-400 cursor-not-allowed line-through bg-gray-50'
-                        }`}
+                              ? 'border-gray-300 hover:border-[#D32F2F] hover:shadow-sm'
+                              : 'border-gray-200 text-gray-400 cursor-not-allowed line-through bg-gray-50'
+                          }`}
                       >
-                        {size}
+                        <div>{variant.size}</div>
+                        <div className="text-xs mt-1">${variantPrice}</div>
                       </button>
                     );
                   })}

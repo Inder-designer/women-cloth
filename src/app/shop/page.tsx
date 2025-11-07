@@ -47,7 +47,6 @@ export default function ShopPage() {
   // Transform products to frontend format
   
   const products = data?.products ? transformProducts(data.products) : [];
-  console.log(products);
   const pagination = data?.pagination;
 
   // Update category from URL on mount

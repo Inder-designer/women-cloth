@@ -25,6 +25,7 @@ export interface FrontendProduct {
     stock: number;
     featured?: boolean;
     tags?: string[];
+    variants?: BackendProduct['variants'];
 }
 
 // Transform backend product to frontend format
@@ -41,7 +42,7 @@ export const transformProduct = (backendProduct: BackendProduct): FrontendProduc
             slug: backendProduct.category.parent?.slug || '',
         },
         price: backendProduct.price,
-        originalPrice: backendProduct.comparePrice,
+        originalPrice: backendProduct.originalPrice,
         image: backendProduct.images?.[0]?.url || '/placeholder-product.jpg',
         images: backendProduct.images?.map(img => img.url) || [],
         rating: backendProduct.rating?.average || 0,
@@ -53,6 +54,7 @@ export const transformProduct = (backendProduct: BackendProduct): FrontendProduc
         stock: backendProduct.stock,
         featured: backendProduct.featured,
         tags: backendProduct.tags || [],
+        variants: backendProduct.variants || [],
     };
 };
 

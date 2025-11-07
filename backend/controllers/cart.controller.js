@@ -64,14 +64,24 @@ exports.addToCart = async (req, res, next) => {
         item.size === size
     );
 
+    // Get price based on variant
+    let itemPrice = product.price;
+    if (size && product.variants && product.variants.length > 0) {
+      const variant = product.variants.find(v => v.size === size);
+      if (variant) {
+        itemPrice = variant.price;
+      }
+    }
+
     if (existingItem) {
       existingItem.quantity += quantity;
+      existingItem.price = itemPrice; // Update price in case variant price changed
     } else {
       cart.items.push({
         product: productId,
         quantity,
         size,
-        price: product.price,
+        price: itemPrice,
       });
     }
 

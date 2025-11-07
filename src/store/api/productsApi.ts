@@ -7,7 +7,7 @@ export interface Product {
   slug: string;
   description: string;
   price: number;
-  comparePrice?: number;
+  originalPrice?: number;
   category: {
     _id: string;
     name: string;
@@ -38,6 +38,12 @@ export interface Product {
   sold: number;
   createdAt: string;
   updatedAt: string;
+  variants?: {
+    size: string;
+    stock: number;
+    price: number;
+    sku?: string;
+  }[];
 }
 
 // Query parameters interface
@@ -92,7 +98,7 @@ export const productsApi = baseApi.injectEndpoints({
     >({
       query: (params = {}) => {
         const queryParams = new URLSearchParams();
-        
+
         if (params.page) queryParams.append('page', params.page.toString());
         if (params.limit) queryParams.append('limit', params.limit.toString());
         if (params.search) queryParams.append('search', params.search);
@@ -108,12 +114,12 @@ export const productsApi = baseApi.injectEndpoints({
         return `/products?${queryParams.toString()}`;
       },
       transformResponse: (response: ProductsResponse) => response.data,
-      providesTags: (result) => 
+      providesTags: (result) =>
         result
           ? [
-              ...result.products.map(({ _id }) => ({ type: 'Product' as const, id: _id })),
-              { type: 'Products' as const },
-            ]
+            ...result.products.map(({ _id }) => ({ type: 'Product' as const, id: _id })),
+            { type: 'Products' as const },
+          ]
           : [{ type: 'Products' as const }],
     }),
 
@@ -133,9 +139,9 @@ export const productsApi = baseApi.injectEndpoints({
 
     // Get related products
     getRelatedProducts: builder.query<Product[], { categoryId: string; productId: string; limit?: number }>({
-      query: ({ categoryId, productId, limit = 4 }) => 
+      query: ({ categoryId, productId, limit = 4 }) =>
         `/products?category=${categoryId}&limit=${limit}`,
-      transformResponse: (response: ProductsResponse, meta, arg) => 
+      transformResponse: (response: ProductsResponse, meta, arg) =>
         response.data.products.filter(product => product._id !== arg.productId),
       providesTags: ['Products'],
     }),
